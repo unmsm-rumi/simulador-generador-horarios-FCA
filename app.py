@@ -17,7 +17,7 @@ palette = ["#c13850","#d86d80","#d55a68","#ef94a4","#fff7e4"]
 # CARGAR DATA
 # ------------------------------------------------
 
-df = pd.read_excel("data/cursos_simulador.xlsx")
+df = pd.read_excel("cursos_simulador.xlsx")
 
 df.columns = (
     df.columns
@@ -244,4 +244,5 @@ if "cursos_elegidos" in st.session_state:
             st.plotly_chart(fig,use_container_width=True)
 
             st.subheader("Resumen de cursos")
+
             st.dataframe(horario)
