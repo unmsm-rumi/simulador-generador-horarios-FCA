@@ -30,7 +30,6 @@ df.columns = (
     .str.replace("ú","u")
 )
 
-# Tras normalizar, la columna queda como "dia 2 (partido)"
 COL_DIA2 = "dia 2 (partido)"
 
 for col in ["carrera","ciclo","sede","plan de estudios"]:
@@ -38,7 +37,6 @@ for col in ["carrera","ciclo","sede","plan de estudios"]:
 
 df = df[df["plan de estudios"].str.contains(r"\d", na=False)]
 
-# Verificar si existen columnas de segunda sesión
 tiene_sesion2_global = all(c in df.columns for c in [COL_DIA2, "hora inicio 2", "hora fin 2"])
 
 if tiene_sesion2_global:
@@ -205,6 +203,17 @@ if "cursos_elegidos" in st.session_state:
 
             fig = go.Figure()
 
+            # Trazas invisibles para forzar el orden de los días
+            for dia in dias:
+                fig.add_trace(go.Bar(
+                    x=[dia],
+                    y=[0],
+                    base=0,
+                    marker_color="rgba(0,0,0,0)",
+                    showlegend=False,
+                    hoverinfo="skip"
+                ))
+
             for i, row in horario.iterrows():
 
                 color = palette[i % len(palette)]
@@ -274,6 +283,7 @@ if "cursos_elegidos" in st.session_state:
 
             fig.update_layout(
                 height=700,
+                barmode="overlay",
                 xaxis=dict(
                     title="Día",
                     categoryorder="array",
