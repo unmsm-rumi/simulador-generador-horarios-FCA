@@ -201,7 +201,7 @@ if "cursos_elegidos" in st.session_state:
 
             st.success("Horario generado correctamente")
 
-            dias = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
+            dias = ["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"]
 
             fig = go.Figure()
 
