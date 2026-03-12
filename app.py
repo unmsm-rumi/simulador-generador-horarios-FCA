@@ -30,16 +30,19 @@ df.columns = (
     .str.replace("ú","u")
 )
 
+# Tras normalizar, la columna queda como "dia 2 (partido)"
+COL_DIA2 = "dia 2 (partido)"
+
 for col in ["carrera","ciclo","sede","plan de estudios"]:
     df[col] = df[col].astype(str)
 
 df = df[df["plan de estudios"].str.contains(r"\d", na=False)]
 
 # Verificar si existen columnas de segunda sesión
-tiene_sesion2_global = all(c in df.columns for c in ["dia 2","hora inicio 2","hora fin 2"])
+tiene_sesion2_global = all(c in df.columns for c in [COL_DIA2, "hora inicio 2", "hora fin 2"])
 
 if tiene_sesion2_global:
-    df["dia 2"] = df["dia 2"].astype(str).fillna("")
+    df[COL_DIA2] = df[COL_DIA2].fillna("").astype(str).str.strip()
     df["hora inicio 2"] = df["hora inicio 2"].astype(str).fillna("")
     df["hora fin 2"] = df["hora fin 2"].astype(str).fillna("")
 
@@ -49,10 +52,10 @@ if tiene_sesion2_global:
 
 st.sidebar.header("Filtros")
 
-carrera = st.sidebar.selectbox("Carrera",sorted(df["carrera"].dropna().unique()))
-ciclo = st.sidebar.selectbox("Ciclo",sorted(df["ciclo"].dropna().unique()))
-sede = st.sidebar.selectbox("Sede",sorted(df["sede"].dropna().unique()))
-plan = st.sidebar.selectbox("Plan de estudios",sorted(df["plan de estudios"].dropna().unique()))
+carrera = st.sidebar.selectbox("Carrera", sorted(df["carrera"].dropna().unique()))
+ciclo = st.sidebar.selectbox("Ciclo", sorted(df["ciclo"].dropna().unique()))
+sede = st.sidebar.selectbox("Sede", sorted(df["sede"].dropna().unique()))
+plan = st.sidebar.selectbox("Plan de estudios", sorted(df["plan de estudios"].dropna().unique()))
 
 filtrado = df[
     (df["carrera"] == carrera) &
@@ -104,20 +107,20 @@ if "cursos_elegidos" in st.session_state:
         curso_df = filtrado[filtrado["nombre del curso"] == curso].copy()
 
         curso_df["docente"] = curso_df["docente"].fillna("Sin docente")
-        curso_df["seccion"] = curso_df.get("seccion","").fillna("Sin sección")
+        curso_df["seccion"] = curso_df.get("seccion", "").fillna("Sin sección")
         curso_df["hora inicio 1"] = curso_df["hora inicio 1"].astype(str)
         curso_df["hora fin 1"] = curso_df["hora fin 1"].astype(str)
 
         def construir_opcion(row):
             sesion1 = f"{row['dia 1']} ({row['hora inicio 1']}-{row['hora fin 1']})"
             if tiene_sesion2_global:
-                dia2 = str(row.get("dia 2","")).strip()
+                dia2 = str(row.get(COL_DIA2, "")).strip()
                 tiene_s2 = dia2 not in ["", "nan", "None"]
             else:
                 tiene_s2 = False
 
             if tiene_s2:
-                sesion2 = f"{row['dia 2']} ({row['hora inicio 2']}-{row['hora fin 2']})"
+                sesion2 = f"{row[COL_DIA2]} ({row['hora inicio 2']}-{row['hora fin 2']})"
                 return f"{row['docente']} - Sección {row['seccion']} | {sesion1} y {sesion2}"
             else:
                 return f"{row['docente']} - Sección {row['seccion']} | {sesion1}"
@@ -151,11 +154,11 @@ if "cursos_elegidos" in st.session_state:
                 "fin": row["hora fin 1"]
             })
             if tiene_sesion2_global:
-                dia2 = str(row.get("dia 2","")).strip()
+                dia2 = str(row.get(COL_DIA2, "")).strip()
                 if dia2 not in ["", "nan", "None"]:
                     sesiones.append({
                         "curso": row["nombre del curso"],
-                        "dia": row["dia 2"],
+                        "dia": dia2,
                         "inicio": row["hora inicio 2"],
                         "fin": row["hora fin 2"]
                     })
@@ -239,7 +242,7 @@ if "cursos_elegidos" in st.session_state:
 
                 # Sesión 2 (si existe)
                 if tiene_sesion2_global:
-                    dia2 = str(row.get("dia 2","")).strip()
+                    dia2 = str(row.get(COL_DIA2, "")).strip()
                     if dia2 not in ["", "nan", "None"]:
                         inicio2 = pd.to_datetime(row["hora inicio 2"])
                         fin2 = pd.to_datetime(row["hora fin 2"])
@@ -255,7 +258,7 @@ if "cursos_elegidos" in st.session_state:
                         )
 
                         fig.add_trace(go.Bar(
-                            x=[row["dia 2"]],
+                            x=[dia2],
                             y=[(fin2 - inicio2).seconds / 3600],
                             base=inicio2.hour + inicio2.minute / 60,
                             marker_color=color,
