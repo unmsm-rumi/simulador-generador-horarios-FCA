@@ -101,16 +101,24 @@ if "cursos_elegidos" in st.session_state:
         curso_df["hora inicio 1"] = curso_df["hora inicio 1"].astype(str)
         curso_df["hora fin 1"] = curso_df["hora fin 1"].astype(str)
 
-        curso_df["opcion"] = (
-            curso_df["docente"]
-            + " - Sección "
-            + curso_df["seccion"].astype(str)
-            + " ("
-            + curso_df["hora inicio 1"]
-            + "-"
-            + curso_df["hora fin 1"]
-            + ")"
-        )
+        if "hora inicio 2" in curso_df.columns:
+            curso_df["hora inicio 2"] = curso_df["hora inicio 2"].astype(str)
+            curso_df["hora fin 2"] = curso_df["hora fin 2"].astype(str)
+            curso_df["dia 2"] = curso_df["dia 2"].astype(str)
+
+        def construir_opcion(row):
+            sesion1 = f"{row['dia 1']} ({row['hora inicio 1']}-{row['hora fin 1']})"
+            tiene_sesion2 = (
+                "dia 2" in row.index
+                and str(row.get("dia 2","")).strip() not in ["", "nan", "None"]
+            )
+            if tiene_sesion2:
+                sesion2 = f"{row['dia 2']} ({row['hora inicio 2']}-{row['hora fin 2']})"
+                return f"{row['docente']} - Sección {row['seccion']} | {sesion1} y {sesion2}"
+            else:
+                return f"{row['docente']} - Sección {row['seccion']} | {sesion1}"
+
+        curso_df["opcion"] = curso_df.apply(construir_opcion, axis=1)
 
         opciones = curso_df["opcion"].tolist()
 
@@ -130,23 +138,42 @@ if "cursos_elegidos" in st.session_state:
 
         conflictos = []
 
-        for i in range(len(df_horario)):
-            for j in range(i+1,len(df_horario)):
+        sesiones = []
+        for _, row in df_horario.iterrows():
+            sesiones.append({
+                "curso": row["nombre del curso"],
+                "dia": row["dia 1"],
+                "inicio": row["hora inicio 1"],
+                "fin": row["hora fin 1"]
+            })
+            tiene_sesion2 = (
+                "dia 2" in row.index
+                and str(row.get("dia 2","")).strip() not in ["", "nan", "None"]
+            )
+            if tiene_sesion2:
+                sesiones.append({
+                    "curso": row["nombre del curso"],
+                    "dia": row["dia 2"],
+                    "inicio": row["hora inicio 2"],
+                    "fin": row["hora fin 2"]
+                })
 
-                c1 = df_horario.iloc[i]
-                c2 = df_horario.iloc[j]
+        for i in range(len(sesiones)):
+            for j in range(i+1, len(sesiones)):
+                s1 = sesiones[i]
+                s2 = sesiones[j]
 
-                if c1["dia 1"] == c2["dia 1"]:
+                if s1["curso"] == s2["curso"]:
+                    continue
 
+                if s1["dia"] == s2["dia"]:
                     if (
-                        c1["hora inicio 1"] < c2["hora fin 1"]
-                        and
-                        c2["hora inicio 1"] < c1["hora fin 1"]
+                        s1["inicio"] < s2["fin"]
+                        and s2["inicio"] < s1["fin"]
                     ):
-
-                        conflictos.append(
-                            f"{c1['nombre del curso']} se cruza con {c2['nombre del curso']}"
-                        )
+                        conflicto = f"{s1['curso']} se cruza con {s2['curso']} el {s1['dia']}"
+                        if conflicto not in conflictos:
+                            conflictos.append(conflicto)
 
         return conflictos
 
@@ -169,21 +196,21 @@ if "cursos_elegidos" in st.session_state:
 
             st.success("Horario generado correctamente")
 
-            horario["inicio"] = pd.to_datetime(horario["hora inicio 1"])
-            horario["fin"] = pd.to_datetime(horario["hora fin 1"])
-
             dias = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
 
             fig = go.Figure()
 
-            for i,row in horario.iterrows():
+            for i, row in horario.iterrows():
 
                 color = palette[i % len(palette)]
-
-                # dividir texto del curso en múltiples líneas
+                text_color = "black" if color == "#fff7e4" else "white"
                 curso_texto = "<br>".join(textwrap.wrap(row["nombre del curso"], width=14))
 
-                texto = (
+                # Sesión 1
+                inicio1 = pd.to_datetime(row["hora inicio 1"])
+                fin1 = pd.to_datetime(row["hora fin 1"])
+
+                texto1 = (
                     curso_texto
                     + "<br>Sección "
                     + str(row["seccion"])
@@ -193,56 +220,73 @@ if "cursos_elegidos" in st.session_state:
                     + str(row["hora fin 1"])
                 )
 
-                # color de texto según fondo
-                text_color = "black" if color == "#fff7e4" else "white"
-
                 fig.add_trace(go.Bar(
-
                     x=[row["dia 1"]],
-                    y=[(row["fin"]-row["inicio"]).seconds/3600],
-                    base=row["inicio"].hour + row["inicio"].minute/60,
-
+                    y=[(fin1 - inicio1).seconds / 3600],
+                    base=inicio1.hour + inicio1.minute / 60,
                     marker_color=color,
                     width=0.6,
-
-                    text=texto,
+                    text=texto1,
                     textposition="inside",
                     textangle=0,
                     insidetextanchor="middle",
-
-                    textfont=dict(
-                        size=14,
-                        color=text_color
-                    ),
-
+                    textfont=dict(size=14, color=text_color),
                     hoverinfo="skip",
                     showlegend=False
-
                 ))
 
+                # Sesión 2 (si existe)
+                tiene_sesion2 = (
+                    "dia 2" in row.index
+                    and str(row.get("dia 2","")).strip() not in ["", "nan", "None"]
+                )
+
+                if tiene_sesion2:
+                    inicio2 = pd.to_datetime(row["hora inicio 2"])
+                    fin2 = pd.to_datetime(row["hora fin 2"])
+
+                    texto2 = (
+                        curso_texto
+                        + "<br>Sección "
+                        + str(row["seccion"])
+                        + "<br>"
+                        + str(row["hora inicio 2"])
+                        + " - "
+                        + str(row["hora fin 2"])
+                    )
+
+                    fig.add_trace(go.Bar(
+                        x=[row["dia 2"]],
+                        y=[(fin2 - inicio2).seconds / 3600],
+                        base=inicio2.hour + inicio2.minute / 60,
+                        marker_color=color,
+                        width=0.6,
+                        text=texto2,
+                        textposition="inside",
+                        textangle=0,
+                        insidetextanchor="middle",
+                        textfont=dict(size=14, color=text_color),
+                        hoverinfo="skip",
+                        showlegend=False
+                    ))
+
             fig.update_layout(
-
                 height=700,
-
                 xaxis=dict(
                     title="Día",
                     categoryorder="array",
                     categoryarray=dias
                 ),
-
                 yaxis=dict(
                     title="Hora",
                     autorange="reversed"
                 ),
-
                 template="plotly_white",
                 showlegend=False
-
             )
 
             st.subheader("Horario semanal")
-            st.plotly_chart(fig,use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("Resumen de cursos")
-
             st.dataframe(horario)
