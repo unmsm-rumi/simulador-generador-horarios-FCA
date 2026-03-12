@@ -274,7 +274,6 @@ if "cursos_elegidos" in st.session_state:
                 xaxis=dict(
                     title="Día",
                     categoryorder="array",
-                    categoryorder="array",
                     categoryarray=dias
                 ),
                 yaxis=dict(
