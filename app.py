@@ -44,6 +44,13 @@ if tiene_sesion2_global:
     df["hora inicio 2"] = df["hora inicio 2"].astype(str).fillna("")
     df["hora fin 2"] = df["hora fin 2"].astype(str).fillna("")
 
+# Función para mostrar sección sin decimales
+def fmt_seccion(val):
+    try:
+        return str(int(float(val)))
+    except:
+        return str(val) if pd.notna(val) else "Sin sección"
+
 # ------------------------------------------------
 # FILTROS
 # ------------------------------------------------
@@ -105,7 +112,7 @@ if "cursos_elegidos" in st.session_state:
         curso_df = filtrado[filtrado["nombre del curso"] == curso].copy()
 
         curso_df["docente"] = curso_df["docente"].fillna("Sin docente")
-        curso_df["seccion"] = curso_df.get("seccion", "").fillna("Sin sección")
+        curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
         curso_df["hora inicio 1"] = curso_df["hora inicio 1"].astype(str)
         curso_df["hora fin 1"] = curso_df["hora fin 1"].astype(str)
 
@@ -145,12 +152,14 @@ if "cursos_elegidos" in st.session_state:
 
         sesiones = []
         for _, row in df_horario.iterrows():
-            sesiones.append({
-                "curso": row["nombre del curso"],
-                "dia": row["dia 1"],
-                "inicio": row["hora inicio 1"],
-                "fin": row["hora fin 1"]
-            })
+            dia1 = str(row.get("dia 1","")).strip()
+            if dia1 not in ["", "nan", "None"]:
+                sesiones.append({
+                    "curso": row["nombre del curso"],
+                    "dia": dia1,
+                    "inicio": row["hora inicio 1"],
+                    "fin": row["hora fin 1"]
+                })
             if tiene_sesion2_global:
                 dia2 = str(row.get(COL_DIA2, "")).strip()
                 if dia2 not in ["", "nan", "None"]:
@@ -219,51 +228,55 @@ if "cursos_elegidos" in st.session_state:
                 color = palette[i % len(palette)]
                 text_color = "black" if color == "#fff7e4" else "white"
                 curso_texto = "<br>".join(textwrap.wrap(row["nombre del curso"], width=14))
+                seccion_txt = fmt_seccion(row["seccion"])
+                docente_txt = row["docente"] if str(row["docente"]) not in ["", "nan", "None"] else "Sin docente"
 
-                # Sesión 1
-                inicio1 = pd.to_datetime(row["hora inicio 1"])
-                fin1 = pd.to_datetime(row["hora fin 1"])
+                # Sesión 1 — solo si tiene día y hora válidos
+                dia1 = str(row.get("dia 1","")).strip()
+                hora_ini1 = str(row.get("hora inicio 1","")).strip()
+                hora_fin1 = str(row.get("hora fin 1","")).strip()
 
-                texto1 = (
-                    curso_texto
-                    + "<br>Sección "
-                    + str(row["seccion"])
-                    + "<br>"
-                    + str(row["hora inicio 1"])
-                    + " - "
-                    + str(row["hora fin 1"])
-                )
+                if dia1 not in ["", "nan", "None"] and hora_ini1 not in ["", "nan", "None"] and hora_fin1 not in ["", "nan", "None"]:
+                    inicio1 = pd.to_datetime(hora_ini1)
+                    fin1 = pd.to_datetime(hora_fin1)
 
-                fig.add_trace(go.Bar(
-                    x=[row["dia 1"]],
-                    y=[(fin1 - inicio1).seconds / 3600],
-                    base=inicio1.hour + inicio1.minute / 60,
-                    marker_color=color,
-                    width=0.6,
-                    text=texto1,
-                    textposition="inside",
-                    textangle=0,
-                    insidetextanchor="middle",
-                    textfont=dict(size=14, color=text_color),
-                    hoverinfo="skip",
-                    showlegend=False
-                ))
+                    texto1 = (
+                        curso_texto
+                        + "<br>" + docente_txt
+                        + "<br>Sección " + seccion_txt
+                        + "<br>" + hora_ini1 + " - " + hora_fin1
+                    )
 
-                # Sesión 2 (si existe)
+                    fig.add_trace(go.Bar(
+                        x=[dia1],
+                        y=[(fin1 - inicio1).seconds / 3600],
+                        base=inicio1.hour + inicio1.minute / 60,
+                        marker_color=color,
+                        width=0.6,
+                        text=texto1,
+                        textposition="inside",
+                        textangle=0,
+                        insidetextanchor="middle",
+                        textfont=dict(size=12, color=text_color),
+                        hoverinfo="skip",
+                        showlegend=False
+                    ))
+
+                # Sesión 2 — solo si tiene día y hora válidos
                 if tiene_sesion2_global:
                     dia2 = str(row.get(COL_DIA2, "")).strip()
-                    if dia2 not in ["", "nan", "None"]:
-                        inicio2 = pd.to_datetime(row["hora inicio 2"])
-                        fin2 = pd.to_datetime(row["hora fin 2"])
+                    hora_ini2 = str(row.get("hora inicio 2","")).strip()
+                    hora_fin2 = str(row.get("hora fin 2","")).strip()
+
+                    if dia2 not in ["", "nan", "None"] and hora_ini2 not in ["", "nan", "None"] and hora_fin2 not in ["", "nan", "None"]:
+                        inicio2 = pd.to_datetime(hora_ini2)
+                        fin2 = pd.to_datetime(hora_fin2)
 
                         texto2 = (
                             curso_texto
-                            + "<br>Sección "
-                            + str(row["seccion"])
-                            + "<br>"
-                            + str(row["hora inicio 2"])
-                            + " - "
-                            + str(row["hora fin 2"])
+                            + "<br>" + docente_txt
+                            + "<br>Sección " + seccion_txt
+                            + "<br>" + hora_ini2 + " - " + hora_fin2
                         )
 
                         fig.add_trace(go.Bar(
@@ -276,7 +289,7 @@ if "cursos_elegidos" in st.session_state:
                             textposition="inside",
                             textangle=0,
                             insidetextanchor="middle",
-                            textfont=dict(size=14, color=text_color),
+                            textfont=dict(size=12, color=text_color),
                             hoverinfo="skip",
                             showlegend=False
                         ))
