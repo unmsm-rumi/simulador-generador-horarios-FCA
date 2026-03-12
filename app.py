@@ -35,6 +35,14 @@ for col in ["carrera","ciclo","sede","plan de estudios"]:
 
 df = df[df["plan de estudios"].str.contains(r"\d", na=False)]
 
+# Verificar si existen columnas de segunda sesión
+tiene_sesion2_global = all(c in df.columns for c in ["dia 2","hora inicio 2","hora fin 2"])
+
+if tiene_sesion2_global:
+    df["dia 2"] = df["dia 2"].astype(str).fillna("")
+    df["hora inicio 2"] = df["hora inicio 2"].astype(str).fillna("")
+    df["hora fin 2"] = df["hora fin 2"].astype(str).fillna("")
+
 # ------------------------------------------------
 # FILTROS
 # ------------------------------------------------
@@ -97,22 +105,18 @@ if "cursos_elegidos" in st.session_state:
 
         curso_df["docente"] = curso_df["docente"].fillna("Sin docente")
         curso_df["seccion"] = curso_df.get("seccion","").fillna("Sin sección")
-
         curso_df["hora inicio 1"] = curso_df["hora inicio 1"].astype(str)
         curso_df["hora fin 1"] = curso_df["hora fin 1"].astype(str)
 
-        if "hora inicio 2" in curso_df.columns:
-            curso_df["hora inicio 2"] = curso_df["hora inicio 2"].astype(str)
-            curso_df["hora fin 2"] = curso_df["hora fin 2"].astype(str)
-            curso_df["dia 2"] = curso_df["dia 2"].astype(str)
-
         def construir_opcion(row):
             sesion1 = f"{row['dia 1']} ({row['hora inicio 1']}-{row['hora fin 1']})"
-            tiene_sesion2 = (
-                "dia 2" in row.index
-                and str(row.get("dia 2","")).strip() not in ["", "nan", "None"]
-            )
-            if tiene_sesion2:
+            if tiene_sesion2_global:
+                dia2 = str(row.get("dia 2","")).strip()
+                tiene_s2 = dia2 not in ["", "nan", "None"]
+            else:
+                tiene_s2 = False
+
+            if tiene_s2:
                 sesion2 = f"{row['dia 2']} ({row['hora inicio 2']}-{row['hora fin 2']})"
                 return f"{row['docente']} - Sección {row['seccion']} | {sesion1} y {sesion2}"
             else:
@@ -146,17 +150,15 @@ if "cursos_elegidos" in st.session_state:
                 "inicio": row["hora inicio 1"],
                 "fin": row["hora fin 1"]
             })
-            tiene_sesion2 = (
-                "dia 2" in row.index
-                and str(row.get("dia 2","")).strip() not in ["", "nan", "None"]
-            )
-            if tiene_sesion2:
-                sesiones.append({
-                    "curso": row["nombre del curso"],
-                    "dia": row["dia 2"],
-                    "inicio": row["hora inicio 2"],
-                    "fin": row["hora fin 2"]
-                })
+            if tiene_sesion2_global:
+                dia2 = str(row.get("dia 2","")).strip()
+                if dia2 not in ["", "nan", "None"]:
+                    sesiones.append({
+                        "curso": row["nombre del curso"],
+                        "dia": row["dia 2"],
+                        "inicio": row["hora inicio 2"],
+                        "fin": row["hora fin 2"]
+                    })
 
         for i in range(len(sesiones)):
             for j in range(i+1, len(sesiones)):
@@ -236,44 +238,42 @@ if "cursos_elegidos" in st.session_state:
                 ))
 
                 # Sesión 2 (si existe)
-                tiene_sesion2 = (
-                    "dia 2" in row.index
-                    and str(row.get("dia 2","")).strip() not in ["", "nan", "None"]
-                )
+                if tiene_sesion2_global:
+                    dia2 = str(row.get("dia 2","")).strip()
+                    if dia2 not in ["", "nan", "None"]:
+                        inicio2 = pd.to_datetime(row["hora inicio 2"])
+                        fin2 = pd.to_datetime(row["hora fin 2"])
 
-                if tiene_sesion2:
-                    inicio2 = pd.to_datetime(row["hora inicio 2"])
-                    fin2 = pd.to_datetime(row["hora fin 2"])
+                        texto2 = (
+                            curso_texto
+                            + "<br>Sección "
+                            + str(row["seccion"])
+                            + "<br>"
+                            + str(row["hora inicio 2"])
+                            + " - "
+                            + str(row["hora fin 2"])
+                        )
 
-                    texto2 = (
-                        curso_texto
-                        + "<br>Sección "
-                        + str(row["seccion"])
-                        + "<br>"
-                        + str(row["hora inicio 2"])
-                        + " - "
-                        + str(row["hora fin 2"])
-                    )
-
-                    fig.add_trace(go.Bar(
-                        x=[row["dia 2"]],
-                        y=[(fin2 - inicio2).seconds / 3600],
-                        base=inicio2.hour + inicio2.minute / 60,
-                        marker_color=color,
-                        width=0.6,
-                        text=texto2,
-                        textposition="inside",
-                        textangle=0,
-                        insidetextanchor="middle",
-                        textfont=dict(size=14, color=text_color),
-                        hoverinfo="skip",
-                        showlegend=False
-                    ))
+                        fig.add_trace(go.Bar(
+                            x=[row["dia 2"]],
+                            y=[(fin2 - inicio2).seconds / 3600],
+                            base=inicio2.hour + inicio2.minute / 60,
+                            marker_color=color,
+                            width=0.6,
+                            text=texto2,
+                            textposition="inside",
+                            textangle=0,
+                            insidetextanchor="middle",
+                            textfont=dict(size=14, color=text_color),
+                            hoverinfo="skip",
+                            showlegend=False
+                        ))
 
             fig.update_layout(
                 height=700,
                 xaxis=dict(
                     title="Día",
+                    categoryorder="array",
                     categoryorder="array",
                     categoryarray=dias
                 ),
