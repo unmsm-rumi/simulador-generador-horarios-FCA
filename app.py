@@ -17,18 +17,24 @@ palette = ["#c13850","#d86d80","#d55a68","#ef94a4","#fff7e4"]
 # CARGAR DATA
 # ------------------------------------------------
 
-df = pd.read_excel("cursos_simulador.xlsx")
+@st.cache_data
+def cargar_data():
+    df = pd.read_excel("cursos_simulador.xlsx")
 
-df.columns = (
-    df.columns
-    .str.strip()
-    .str.lower()
-    .str.replace("á","a")
-    .str.replace("é","e")
-    .str.replace("í","i")
-    .str.replace("ó","o")
-    .str.replace("ú","u")
-)
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace("á","a")
+        .str.replace("é","e")
+        .str.replace("í","i")
+        .str.replace("ó","o")
+        .str.replace("ú","u")
+    )
+
+    return df
+
+df = cargar_data()
 
 COL_DIA2 = "dia 2 (partido)"
 
@@ -44,12 +50,66 @@ if tiene_sesion2_global:
     df["hora inicio 2"] = df["hora inicio 2"].astype(str).fillna("")
     df["hora fin 2"] = df["hora fin 2"].astype(str).fillna("")
 
-# Función para mostrar sección sin decimales
+# ------------------------------------------------
+# FUNCIONES AUXILIARES
+# ------------------------------------------------
+
 def fmt_seccion(val):
     try:
         return str(int(float(val)))
     except:
         return str(val) if pd.notna(val) else "Sin sección"
+
+def detectar_cruces(df_horario):
+
+    conflictos = []
+    sesiones = []
+
+    for _, row in df_horario.iterrows():
+
+        dia1 = str(row.get("dia 1","")).strip()
+        if dia1 not in ["", "nan", "None"]:
+            sesiones.append({
+                "curso": row["nombre del curso"],
+                "dia": dia1,
+                "inicio": pd.to_datetime(row["hora inicio 1"]),
+                "fin": pd.to_datetime(row["hora fin 1"])
+            })
+
+        if tiene_sesion2_global:
+            dia2 = str(row.get(COL_DIA2,"")).strip()
+            if dia2 not in ["", "nan", "None"]:
+                sesiones.append({
+                    "curso": row["nombre del curso"],
+                    "dia": dia2,
+                    "inicio": pd.to_datetime(row["hora inicio 2"]),
+                    "fin": pd.to_datetime(row["hora fin 2"])
+                })
+
+    for i in range(len(sesiones)):
+        for j in range(i+1, len(sesiones)):
+
+            s1 = sesiones[i]
+            s2 = sesiones[j]
+
+            if s1["curso"] == s2["curso"]:
+                continue
+
+            if s1["dia"] == s2["dia"]:
+
+                if s1["inicio"] < s2["fin"] and s2["inicio"] < s1["fin"]:
+                    conflicto = f"{s1['curso']} se cruza con {s2['curso']} el {s1['dia']}"
+                    if conflicto not in conflictos:
+                        conflictos.append(conflicto)
+
+    return conflictos
+
+# ------------------------------------------------
+# BOTÓN REINICIAR
+# ------------------------------------------------
+
+if st.sidebar.button("Reiniciar simulador"):
+    st.session_state.clear()
 
 # ------------------------------------------------
 # FILTROS
@@ -79,7 +139,7 @@ if filtrado.empty:
 
 st.header("Paso 1: Selecciona los cursos")
 
-cursos = filtrado["nombre del curso"].unique()
+cursos = sorted(filtrado["nombre del curso"].unique())
 
 cursos_seleccionados = []
 
@@ -91,9 +151,8 @@ if st.button("Continuar a horarios"):
 
     if len(cursos_seleccionados) == 0:
         st.warning("Selecciona al menos un curso")
-        st.stop()
-
-    st.session_state["cursos_elegidos"] = cursos_seleccionados
+    else:
+        st.session_state.cursos_elegidos = cursos_seleccionados
 
 # ------------------------------------------------
 # PASO 2 — SELECCIONAR HORARIOS
@@ -103,7 +162,7 @@ if "cursos_elegidos" in st.session_state:
 
     st.header("Paso 2: Escoge profesor y horario")
 
-    cursos_elegidos = st.session_state["cursos_elegidos"]
+    cursos_elegidos = st.session_state.cursos_elegidos
 
     seleccionados = []
 
@@ -113,14 +172,17 @@ if "cursos_elegidos" in st.session_state:
 
         curso_df["docente"] = curso_df["docente"].fillna("Sin docente")
         curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
+
         curso_df["hora inicio 1"] = curso_df["hora inicio 1"].astype(str)
         curso_df["hora fin 1"] = curso_df["hora fin 1"].astype(str)
 
         def construir_opcion(row):
+
             sesion1 = f"{row['dia 1']} ({row['hora inicio 1']}-{row['hora fin 1']})"
+
             if tiene_sesion2_global:
-                dia2 = str(row.get(COL_DIA2, "")).strip()
-                tiene_s2 = dia2 not in ["", "nan", "None"]
+                dia2 = str(row.get(COL_DIA2,"")).strip()
+                tiene_s2 = dia2 not in ["","nan","None"]
             else:
                 tiene_s2 = False
 
@@ -134,60 +196,13 @@ if "cursos_elegidos" in st.session_state:
 
         opciones = curso_df["opcion"].tolist()
 
-        seleccion = st.selectbox(curso, opciones)
+        seleccion = st.selectbox(curso, opciones, key=f"select_{curso}")
 
         fila = curso_df[curso_df["opcion"] == seleccion].iloc[0]
 
         seleccionados.append(fila)
 
     horario = pd.DataFrame(seleccionados)
-
-# ------------------------------------------------
-# DETECTAR CRUCES
-# ------------------------------------------------
-
-    def detectar_cruces(df_horario):
-
-        conflictos = []
-
-        sesiones = []
-        for _, row in df_horario.iterrows():
-            dia1 = str(row.get("dia 1","")).strip()
-            if dia1 not in ["", "nan", "None"]:
-                sesiones.append({
-                    "curso": row["nombre del curso"],
-                    "dia": dia1,
-                    "inicio": row["hora inicio 1"],
-                    "fin": row["hora fin 1"]
-                })
-            if tiene_sesion2_global:
-                dia2 = str(row.get(COL_DIA2, "")).strip()
-                if dia2 not in ["", "nan", "None"]:
-                    sesiones.append({
-                        "curso": row["nombre del curso"],
-                        "dia": dia2,
-                        "inicio": row["hora inicio 2"],
-                        "fin": row["hora fin 2"]
-                    })
-
-        for i in range(len(sesiones)):
-            for j in range(i+1, len(sesiones)):
-                s1 = sesiones[i]
-                s2 = sesiones[j]
-
-                if s1["curso"] == s2["curso"]:
-                    continue
-
-                if s1["dia"] == s2["dia"]:
-                    if (
-                        s1["inicio"] < s2["fin"]
-                        and s2["inicio"] < s1["fin"]
-                    ):
-                        conflicto = f"{s1['curso']} se cruza con {s2['curso']} el {s1['dia']}"
-                        if conflicto not in conflictos:
-                            conflictos.append(conflicto)
-
-        return conflictos
 
 # ------------------------------------------------
 # GENERAR HORARIO
@@ -212,7 +227,6 @@ if "cursos_elegidos" in st.session_state:
 
             fig = go.Figure()
 
-            # Trazas invisibles para forzar el orden de los días
             for dia in dias:
                 fig.add_trace(go.Bar(
                     x=[dia],
@@ -227,16 +241,18 @@ if "cursos_elegidos" in st.session_state:
 
                 color = palette[i % len(palette)]
                 text_color = "black" if color == "#fff7e4" else "white"
+
                 curso_texto = "<br>".join(textwrap.wrap(row["nombre del curso"], width=14))
                 seccion_txt = fmt_seccion(row["seccion"])
-                docente_txt = row["docente"] if str(row["docente"]) not in ["", "nan", "None"] else "Sin docente"
 
-                # Sesión 1 — solo si tiene día y hora válidos
+                docente_txt = row["docente"] if str(row["docente"]) not in ["","nan","None"] else "Sin docente"
+
                 dia1 = str(row.get("dia 1","")).strip()
                 hora_ini1 = str(row.get("hora inicio 1","")).strip()
                 hora_fin1 = str(row.get("hora fin 1","")).strip()
 
-                if dia1 not in ["", "nan", "None"] and hora_ini1 not in ["", "nan", "None"] and hora_fin1 not in ["", "nan", "None"]:
+                if dia1 not in ["","nan","None"]:
+
                     inicio1 = pd.to_datetime(hora_ini1)
                     fin1 = pd.to_datetime(hora_fin1)
 
@@ -255,28 +271,26 @@ if "cursos_elegidos" in st.session_state:
                         width=0.6,
                         text=texto1,
                         textposition="inside",
-                        textangle=0,
                         insidetextanchor="middle",
                         textfont=dict(size=12, color=text_color),
                         hoverinfo="skip",
                         showlegend=False
                     ))
 
-                # Sesión 2 — solo si tiene día y hora válidos
                 if tiene_sesion2_global:
-                    dia2 = str(row.get(COL_DIA2, "")).strip()
-                    hora_ini2 = str(row.get("hora inicio 2","")).strip()
-                    hora_fin2 = str(row.get("hora fin 2","")).strip()
 
-                    if dia2 not in ["", "nan", "None"] and hora_ini2 not in ["", "nan", "None"] and hora_fin2 not in ["", "nan", "None"]:
-                        inicio2 = pd.to_datetime(hora_ini2)
-                        fin2 = pd.to_datetime(hora_fin2)
+                    dia2 = str(row.get(COL_DIA2,"")).strip()
+
+                    if dia2 not in ["","nan","None"]:
+
+                        inicio2 = pd.to_datetime(row["hora inicio 2"])
+                        fin2 = pd.to_datetime(row["hora fin 2"])
 
                         texto2 = (
                             curso_texto
                             + "<br>" + docente_txt
                             + "<br>Sección " + seccion_txt
-                            + "<br>" + hora_ini2 + " - " + hora_fin2
+                            + "<br>" + row["hora inicio 2"] + " - " + row["hora fin 2"]
                         )
 
                         fig.add_trace(go.Bar(
@@ -287,7 +301,6 @@ if "cursos_elegidos" in st.session_state:
                             width=0.6,
                             text=texto2,
                             textposition="inside",
-                            textangle=0,
                             insidetextanchor="middle",
                             textfont=dict(size=12, color=text_color),
                             hoverinfo="skip",
