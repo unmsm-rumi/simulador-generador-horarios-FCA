@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import textwrap
+from pathlib import Path
+
+# Ruta al Excel: siempre relativa al directorio donde está este script
+BASE_DIR = Path(__file__).parent
+EXCEL_PATH = BASE_DIR / "cursos_simulador.xlsx"
 
 st.set_page_config(layout="wide")
 
@@ -19,7 +24,7 @@ palette = ["#c13850","#d86d80","#d55a68","#ef94a4","#fff7e4"]
 
 @st.cache_data
 def cargar_data():
-    df = pd.read_excel("cursos_simulador.xlsx")
+    df = pd.read_excel(EXCEL_PATH)
     df.columns = (
         df.columns
         .str.strip()
