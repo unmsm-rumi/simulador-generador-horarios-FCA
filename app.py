@@ -10,6 +10,11 @@ EXCEL_PATH = BASE_DIR / "cursos_simulador.xlsx"
 
 st.set_page_config(layout="wide")
 
+# Logo Rumi en la esquina superior izquierda del sidebar
+LOGO_PATH = BASE_DIR / "logo.png"
+if LOGO_PATH.exists():
+    st.logo(str(LOGO_PATH), size="medium")
+
 st.title("Simulador de Horarios Universitarios")
 
 # ------------------------------------------------
