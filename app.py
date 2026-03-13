@@ -22,8 +22,9 @@ palette = ["#c13850","#d86d80","#d55a68","#ef94a4","#fff7e4"]
 # CARGAR DATA
 # ------------------------------------------------
 
-@st.cache_data
-def cargar_data():
+@st.cache_data(ttl=0)
+def cargar_data(file_mtime):
+    """file_mtime se pasa para invalidar cache cuando el Excel cambie."""
     if not EXCEL_PATH.exists():
         ruta = str(EXCEL_PATH)
         st.error(
@@ -48,7 +49,11 @@ def cargar_data():
             df[col] = df[col].astype(str).str.strip()
     return df
 
-df = cargar_data()
+# Pasar el timestamp de modificacion del Excel como argumento
+# Esto fuerza que el cache se invalide automaticamente cuando se suba un Excel nuevo
+import os
+file_mtime = os.path.getmtime(EXCEL_PATH) if EXCEL_PATH.exists() else 0
+df = cargar_data(file_mtime)
 
 COL_DIA2 = "dia 2 (partido)"
 
