@@ -57,6 +57,25 @@ palette = ["#c85c72","#c85c72","#c85c72","#c85c72","#c85c72"]
 # CARGAR DATA
 # ------------------------------------------------
 
+def normalizar_texto(serie):
+    """Normaliza texto: strip, uppercase, quita tildes."""
+    return (
+        serie.astype(str)
+        .str.strip()
+        .str.upper()
+        .str.replace("Á", "A", regex=False)
+        .str.replace("É", "E", regex=False)
+        .str.replace("Í", "I", regex=False)
+        .str.replace("Ó", "O", regex=False)
+        .str.replace("Ú", "U", regex=False)
+        .str.replace("á", "a", regex=False)
+        .str.replace("é", "e", regex=False)
+        .str.replace("í", "i", regex=False)
+        .str.replace("ó", "o", regex=False)
+        .str.replace("ú", "u", regex=False)
+    )
+
+
 @st.cache_data(ttl=0)
 def cargar_data(file_mtime):
     """file_mtime se pasa para invalidar cache cuando el Excel cambie."""
@@ -69,31 +88,50 @@ def cargar_data(file_mtime):
         )
         st.stop()
     df = pd.read_excel(EXCEL_PATH)
+
+    # Normalizar nombres de columnas
     df.columns = (
         df.columns
         .str.strip()
         .str.lower()
-        .str.replace("á","a")
-        .str.replace("é","e")
-        .str.replace("í","i")
-        .str.replace("ó","o")
-        .str.replace("ú","u")
+        .str.replace("á", "a", regex=False)
+        .str.replace("é", "e", regex=False)
+        .str.replace("í", "i", regex=False)
+        .str.replace("ó", "o", regex=False)
+        .str.replace("ú", "u", regex=False)
     )
-    for col in ["carrera","ciclo","sede","plan de estudios"]:
+
+    # Normalizar columnas clave: strip + uppercase + sin tildes
+    for col in ["carrera", "ciclo", "sede", "plan de estudios"]:
         if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
+            df[col] = normalizar_texto(df[col])
+
+    # Plan de estudios: eliminar decimales si viene como número (ej: 2023.0 → 2023)
+    if "plan de estudios" in df.columns:
+        df["plan de estudios"] = df["plan de estudios"].apply(
+            lambda x: str(int(float(x))) if x not in ["NAN", "NONE", ""] and _es_numero(x) else x
+        )
+
     return df
 
-# Pasar el timestamp de modificacion del Excel como argumento
-# Esto fuerza que el cache se invalide automaticamente cuando se suba un Excel nuevo
+
+def _es_numero(val):
+    try:
+        float(val)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 import os
 file_mtime = os.path.getmtime(EXCEL_PATH) if EXCEL_PATH.exists() else 0
 df = cargar_data(file_mtime)
 
 COL_DIA2 = "dia 2 (partido)"
 
-for col in ["carrera","ciclo","sede","plan de estudios"]:
-    df[col] = df[col].astype(str)
+for col in ["carrera", "ciclo", "sede", "plan de estudios"]:
+    if col in df.columns:
+        df[col] = df[col].astype(str)
 
 tiene_sesion2_global = all(c in df.columns for c in [COL_DIA2, "hora inicio 2", "hora fin 2"])
 
@@ -123,7 +161,6 @@ def parsear_hora(val):
     s = str(val).strip()
     if not s or s in ["nan", "None", ""]:
         return pd.NaT
-    # Remove seconds if present (HH:MM:SS → HH:MM)
     parts = s.split(":")
     if len(parts) >= 2:
         try:
@@ -136,16 +173,16 @@ def parsear_hora(val):
 def obtener_sesiones(row):
     sesiones = []
 
-    dia1 = str(row.get("dia 1","")).strip()
-    if dia1 not in ["","nan","None"]:
+    dia1 = str(row.get("dia 1", "")).strip()
+    if dia1 not in ["", "nan", "None"]:
         inicio = parsear_hora(row["hora inicio 1"])
         fin    = parsear_hora(row["hora fin 1"])
         if pd.notna(inicio) and pd.notna(fin):
             sesiones.append({"curso": row["nombre del curso"], "dia": dia1, "inicio": inicio, "fin": fin})
 
     if tiene_sesion2_global:
-        dia2 = str(row.get(COL_DIA2,"")).strip()
-        if dia2 not in ["","nan","None"]:
+        dia2 = str(row.get(COL_DIA2, "")).strip()
+        if dia2 not in ["", "nan", "None"]:
             inicio = parsear_hora(row["hora inicio 2"])
             fin    = parsear_hora(row["hora fin 2"])
             if pd.notna(inicio) and pd.notna(fin):
@@ -161,7 +198,7 @@ def detectar_cruces(df_horario):
 
     conflictos = []
     for i in range(len(sesiones)):
-        for j in range(i+1, len(sesiones)):
+        for j in range(i + 1, len(sesiones)):
             s1, s2 = sesiones[i], sesiones[j]
             if s1["curso"] == s2["curso"]:
                 continue
@@ -174,34 +211,27 @@ def detectar_cruces(df_horario):
 
 
 def construir_opcion(row):
-    """
-    Construye la etiqueta del selectbox.
-    Incluye sede, docente, seccion y horario.
-    Si no hay horario valido lo indica claramente.
-    """
-    docente = str(row.get("docente","")).strip()
-    if not docente or docente in ["nan","None",""]:
+    docente = str(row.get("docente", "")).strip()
+    if not docente or docente in ["nan", "None", ""]:
         docente = "Sin docente"
 
-    seccion = fmt_seccion(row.get("seccion",""))
-    sede    = str(row.get("sede","")).strip()
+    seccion = fmt_seccion(row.get("seccion", ""))
+    sede    = str(row.get("sede", "")).strip()
 
-    # Sesion 1
-    dia1 = str(row.get("dia 1","")).strip()
+    dia1 = str(row.get("dia 1", "")).strip()
     ses1 = None
-    if dia1 not in ["","nan","None"]:
-        ini = parsear_hora(row.get("hora inicio 1",""))
-        fin = parsear_hora(row.get("hora fin 1",""))
+    if dia1 not in ["", "nan", "None"]:
+        ini = parsear_hora(row.get("hora inicio 1", ""))
+        fin = parsear_hora(row.get("hora fin 1", ""))
         if pd.notna(ini) and pd.notna(fin):
             ses1 = f"{dia1} {ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
 
-    # Sesion 2
     ses2 = None
     if tiene_sesion2_global:
-        dia2 = str(row.get(COL_DIA2,"")).strip()
-        if dia2 not in ["","nan","None"]:
-            ini2 = parsear_hora(row.get("hora inicio 2",""))
-            fin2 = parsear_hora(row.get("hora fin 2",""))
+        dia2 = str(row.get(COL_DIA2, "")).strip()
+        if dia2 not in ["", "nan", "None"]:
+            ini2 = parsear_hora(row.get("hora inicio 2", ""))
+            fin2 = parsear_hora(row.get("hora fin 2", ""))
             if pd.notna(ini2) and pd.notna(fin2):
                 ses2 = f"{dia2} {ini2.strftime('%H:%M')}-{fin2.strftime('%H:%M')}"
 
@@ -228,14 +258,12 @@ if st.sidebar.button("Reiniciar simulador"):
 
 # ------------------------------------------------
 # FILTROS
-# Sede ya NO filtra que cursos aparecen.
-# Solo se usa para preseleccionar secciones en paso 2.
 # ------------------------------------------------
 
 st.sidebar.header("Filtros")
 
-# Orden correcto de ciclos (no alfabético)
-ORDEN_CICLOS = ["TERCER CICLO", "QUINTO CICLO", "SÉPTIMO CICLO", "NOVENO CICLO"]
+# Orden correcto de ciclos (normalizado, sin tildes, uppercase)
+ORDEN_CICLOS = ["TERCER CICLO", "QUINTO CICLO", "SEPTIMO CICLO", "NOVENO CICLO"]
 ciclos_disponibles = df["ciclo"].dropna().unique()
 ciclos_ordenados = [c for c in ORDEN_CICLOS if c in ciclos_disponibles] + \
                    [c for c in sorted(ciclos_disponibles) if c not in ORDEN_CICLOS]
@@ -313,7 +341,6 @@ if "cursos_elegidos" in st.session_state:
 
         curso_df = filtrado[filtrado["nombre del curso"] == curso].copy()
 
-        # Limpiar docente
         curso_df["docente"] = (
             curso_df["docente"]
             .fillna("Sin docente")
@@ -322,16 +349,11 @@ if "cursos_elegidos" in st.session_state:
             .replace({"": "Sin docente", "nan": "Sin docente", "None": "Sin docente"})
         )
         curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
-
-        # Construir etiqueta de opcion
-        curso_df["opcion"] = curso_df.apply(construir_opcion, axis=1)
-
-        # Ordenar secciones por numero de seccion
+        curso_df["opcion"]  = curso_df.apply(construir_opcion, axis=1)
         curso_df = curso_df.sort_values("seccion")
 
         opciones = curso_df["opcion"].tolist()
 
-        # Avisar si todas sin horario
         todas_sin_horario = all("Sin horario asignado" in op for op in opciones)
         if todas_sin_horario:
             st.warning(f"**{curso}**: ninguna seccion tiene horario asignado aun.")
@@ -342,7 +364,7 @@ if "cursos_elegidos" in st.session_state:
         seleccion = st.selectbox(f"**{curso}**", opciones_con_skip, key=f"sel_{curso}")
 
         if seleccion == NO_LLEVAR:
-            continue  # Omitir este curso del horario
+            continue
 
         fila = curso_df[curso_df["opcion"] == seleccion].iloc[0]
         seleccionados.append(fila)
@@ -368,17 +390,19 @@ if "cursos_elegidos" in st.session_state:
         else:
             st.success("Horario generado correctamente.")
 
-            dias = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"]
-            # Incluir version con tilde para que el grafico los encuentre
-            dias_con_tilde = ["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"]
+            dias = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"]
+            dias_con_tilde = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"]
 
             fig       = go.Figure()
             color_map = {}
             color_idx = 0
 
-            # Mapeo dia -> posicion X (columna)
-            dia_x = {d: i for i, d in enumerate(dias_con_tilde)}
-            ancho_col = 0.45  # ancho de cada bloque (de -0.45 a +0.45 del centro)
+            dia_x    = {d: i for i, d in enumerate(dias_con_tilde)}
+            # También mapear versión sin tilde por si los datos vienen normalizados
+            dia_x_nt = {d: i for i, d in enumerate(dias)}
+            dia_x.update(dia_x_nt)
+
+            ancho_col = 0.45
 
             for _, row in horario.iterrows():
                 sesiones = obtener_sesiones(row)
@@ -393,8 +417,8 @@ if "cursos_elegidos" in st.session_state:
                 color      = color_map[nombre]
                 text_color = "white"
 
-                docente = str(row.get("docente","Sin docente")).strip()
-                if not docente or docente in ["nan","None",""]:
+                docente = str(row.get("docente", "Sin docente")).strip()
+                if not docente or docente in ["nan", "None", ""]:
                     docente = "Sin docente"
 
                 for ses in sesiones:
@@ -404,16 +428,14 @@ if "cursos_elegidos" in st.session_state:
                     if dia not in dia_x:
                         continue
 
-                    cx     = dia_x[dia]
-                    y0     = ini.hour + ini.minute / 60
-                    y1     = fin.hour + fin.minute / 60
-                    cy     = (y0 + y1) / 2
-                    dur_h  = y1 - y0
+                    cx    = dia_x[dia]
+                    y0    = ini.hour + ini.minute / 60
+                    y1    = fin.hour + fin.minute / 60
+                    cy    = (y0 + y1) / 2
+                    dur_h = y1 - y0
 
-                    # Nombre del curso cortado a 1 linea
                     nombre_corto = nombre if len(nombre) <= 22 else nombre[:20] + "…"
 
-                    # Texto dentro del bloque: nombre + hora
                     label = (
                         f"<b>{nombre_corto}</b><br>"
                         f"Sec.{fmt_seccion(row['seccion'])} | "
@@ -422,7 +444,6 @@ if "cursos_elegidos" in st.session_state:
                     if dur_h >= 1.5:
                         label += f"<br>{docente}"
 
-                    # Rectangulo de color
                     fig.add_shape(
                         type="rect",
                         x0=cx - ancho_col, x1=cx + ancho_col,
@@ -432,7 +453,6 @@ if "cursos_elegidos" in st.session_state:
                         layer="below",
                     )
 
-                    # Texto centrado horizontal dentro del bloque
                     fig.add_annotation(
                         x=cx,
                         y=cy,
@@ -451,8 +471,8 @@ if "cursos_elegidos" in st.session_state:
             else:
                 hora_min = 6
                 hora_max = 23
-                tickvals_y = [h + m/60 for h in range(hora_min, hora_max+1) for m in [0]]
-                ticktext_y = [f"{h:02d}:00" for h in range(hora_min, hora_max+1)]
+                tickvals_y = [h + m / 60 for h in range(hora_min, hora_max + 1) for m in [0]]
+                ticktext_y = [f"{h:02d}:00" for h in range(hora_min, hora_max + 1)]
 
                 n_dias = len(dias_con_tilde)
                 fig.update_layout(
@@ -469,7 +489,7 @@ if "cursos_elegidos" in st.session_state:
                     yaxis=dict(
                         tickvals=tickvals_y,
                         ticktext=ticktext_y,
-                        range=[hora_max, hora_min],  # invertido: horas crecen hacia abajo
+                        range=[hora_max, hora_min],
                         showgrid=True,
                         gridcolor="rgba(128,128,128,0.3)",
                         fixedrange=True,
@@ -485,7 +505,7 @@ if "cursos_elegidos" in st.session_state:
                 st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("Resumen de cursos seleccionados")
-            cols_resumen = ["nombre del curso","docente","seccion","sede","dia 1","hora inicio 1","hora fin 1"]
+            cols_resumen = ["nombre del curso", "docente", "seccion", "sede", "dia 1", "hora inicio 1", "hora fin 1"]
             resumen = horario[[c for c in cols_resumen if c in horario.columns]].copy()
-            resumen.columns = ["Curso","Docente","Seccion","Sede","Dia","Inicio","Fin"][:len(resumen.columns)]
+            resumen.columns = ["Curso", "Docente", "Seccion", "Sede", "Dia", "Inicio", "Fin"][:len(resumen.columns)]
             st.dataframe(resumen, use_container_width=True)
