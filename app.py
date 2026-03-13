@@ -13,7 +13,15 @@ st.set_page_config(layout="wide")
 # Logo Rumi en la esquina superior izquierda del sidebar
 LOGO_PATH = BASE_DIR / "logo.png"
 if LOGO_PATH.exists():
-    st.sidebar.image(str(LOGO_PATH), width=160)
+    import base64
+    with open(str(LOGO_PATH), "rb") as img_file:
+        logo_b64 = base64.b64encode(img_file.read()).decode()
+    st.sidebar.markdown(
+        f'''<img src="data:image/png;base64,{logo_b64}"
+             style="width:200px; image-rendering:-webkit-optimize-contrast;
+                    image-rendering:crisp-edges; display:block; margin-bottom:8px;">''',
+        unsafe_allow_html=True
+    )
 
 st.title("Simulador de Horarios Universitarios")
 
