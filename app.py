@@ -173,24 +173,42 @@ if st.sidebar.button("Reiniciar simulador"):
 
 st.sidebar.header("Filtros")
 
+# Orden correcto de ciclos (no alfabético)
+ORDEN_CICLOS = ["TERCER CICLO", "QUINTO CICLO", "SÉPTIMO CICLO", "NOVENO CICLO"]
+ciclos_disponibles = df["ciclo"].dropna().unique()
+ciclos_ordenados = [c for c in ORDEN_CICLOS if c in ciclos_disponibles] +                    [c for c in sorted(ciclos_disponibles) if c not in ORDEN_CICLOS]
+
 carrera = st.sidebar.selectbox("Carrera",          sorted(df["carrera"].dropna().unique()))
-ciclo   = st.sidebar.selectbox("Ciclo",            sorted(df["ciclo"].dropna().unique()))
+ciclo   = st.sidebar.selectbox("Ciclo",            ciclos_ordenados)
 plan    = st.sidebar.selectbox("Plan de estudios", sorted(df["plan de estudios"].dropna().unique()))
 
-sede_pref = st.sidebar.selectbox(
-    "Sede preferida (para ordenar secciones)",
-    ["Todas"] + sorted(df["sede"].dropna().unique())
-)
-
-# Filtrar cursos solo por carrera + ciclo + plan (sede NO excluye cursos)
-filtrado = df[
+# Base filtrada por carrera + ciclo + plan (sin sede aún)
+filtrado_base = df[
     (df["carrera"] == carrera) &
     (df["ciclo"]   == ciclo)   &
     (df["plan de estudios"] == plan)
 ]
 
+# Sedes disponibles para esta combinación
+sedes_disponibles = sorted(filtrado_base["sede"].dropna().unique())
+
+sede = st.sidebar.selectbox(
+    "Sede",
+    ["Todas"] + sedes_disponibles
+)
+
+# Aplicar filtro de sede
+if sede == "Todas":
+    filtrado = filtrado_base
+else:
+    filtrado = filtrado_base[filtrado_base["sede"] == sede]
+
+if filtrado_base.empty:
+    st.warning(f"No hay cursos para {carrera} — {ciclo} — Plan {plan}.")
+    st.stop()
+
 if filtrado.empty:
-    st.warning("No existen cursos con esos filtros.")
+    st.warning(f"No hay cursos en la sede **{sede}** para {carrera} — {ciclo} — Plan {plan}.")
     st.stop()
 
 # ------------------------------------------------
@@ -224,7 +242,7 @@ if st.button("Continuar a horarios"):
 if "cursos_elegidos" in st.session_state:
 
     st.header("Paso 2: Escoge seccion y horario")
-    st.caption("Las opciones muestran todas las sedes disponibles. Tu sede preferida aparece primero.")
+    st.caption("Las opciones muestran las secciones disponibles para la sede seleccionada.")
 
     cursos_elegidos = st.session_state.cursos_elegidos
     seleccionados   = []
@@ -246,10 +264,8 @@ if "cursos_elegidos" in st.session_state:
         # Construir etiqueta de opcion
         curso_df["opcion"] = curso_df.apply(construir_opcion, axis=1)
 
-        # Ordenar: sede preferida primero
-        if sede_pref != "Todas":
-            orden = curso_df["sede"].apply(lambda s: 0 if s == sede_pref else 1)
-            curso_df = curso_df.assign(_orden=orden).sort_values("_orden").drop(columns="_orden")
+        # Ordenar secciones por numero de seccion
+        curso_df = curso_df.sort_values("seccion")
 
         opciones = curso_df["opcion"].tolist()
 
