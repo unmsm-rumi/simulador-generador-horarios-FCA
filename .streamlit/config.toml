@@ -1,6 +1,0 @@
-[theme]
-# Colores basados en la paleta de la organización
-primaryColor = "#c13850"          # Rojo principal — botones, sliders, checkboxes
-backgroundColor = "#1a0a0d"       # Fondo principal — oscuro con tinte rojo muy sutil
-secondaryBackgroundColor = "#2e1018" # Fondo sidebar y tarjetas
-textColor = "#f5e8eb"             # Texto principal — blanco con tinte cálido
