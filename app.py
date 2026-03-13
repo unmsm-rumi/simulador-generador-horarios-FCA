@@ -182,6 +182,7 @@ def construir_opcion(row):
 # ------------------------------------------------
 
 if st.sidebar.button("Reiniciar simulador"):
+    st.cache_data.clear()
     st.session_state.clear()
     st.rerun()
 
