@@ -13,7 +13,7 @@ st.set_page_config(layout="wide")
 # Logo Rumi en la esquina superior izquierda del sidebar
 LOGO_PATH = BASE_DIR / "logo.png"
 if LOGO_PATH.exists():
-    st.logo(str(LOGO_PATH), size="medium")
+    st.logo(str(LOGO_PATH), size="large")
 
 st.title("Simulador de Horarios Universitarios")
 
@@ -207,7 +207,8 @@ st.sidebar.header("Filtros")
 # Orden correcto de ciclos (no alfabético)
 ORDEN_CICLOS = ["TERCER CICLO", "QUINTO CICLO", "SÉPTIMO CICLO", "NOVENO CICLO"]
 ciclos_disponibles = df["ciclo"].dropna().unique()
-ciclos_ordenados = [c for c in ORDEN_CICLOS if c in ciclos_disponibles] +                    [c for c in sorted(ciclos_disponibles) if c not in ORDEN_CICLOS]
+ciclos_ordenados = [c for c in ORDEN_CICLOS if c in ciclos_disponibles] + \
+                   [c for c in sorted(ciclos_disponibles) if c not in ORDEN_CICLOS]
 
 carrera = st.sidebar.selectbox("Carrera",          sorted(df["carrera"].dropna().unique()))
 ciclo   = st.sidebar.selectbox("Ciclo",            ciclos_ordenados)
