@@ -426,7 +426,7 @@ if "cursos_elegidos" in st.session_state:
                         ticktext=dias_con_tilde,
                         range=[-0.5, n_dias - 0.5],
                         showgrid=True,
-                        gridcolor="rgba(200,200,200,0.5)",
+                        gridcolor="rgba(128,128,128,0.3)",
                         side="top",
                         fixedrange=True,
                     ),
@@ -435,12 +435,14 @@ if "cursos_elegidos" in st.session_state:
                         ticktext=ticktext_y,
                         range=[hora_max, hora_min],  # invertido: horas crecen hacia abajo
                         showgrid=True,
-                        gridcolor="rgba(200,200,200,0.5)",
+                        gridcolor="rgba(128,128,128,0.3)",
                         fixedrange=True,
                     ),
-                    template="plotly_white",
+                    template="none",
                     margin=dict(t=60, l=70, r=20, b=20),
-                    plot_bgcolor="white",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color=None),
                 )
 
                 st.subheader("Horario semanal")
