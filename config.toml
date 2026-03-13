@@ -1,0 +1,6 @@
+[theme]
+# Paleta oficial Rumi - Manual de Marca
+primaryColor = "#c13850"          # Rojo Rumi — botones, sliders, selects activos
+backgroundColor = "#fff7e4"       # Crema Rumi — fondo principal
+secondaryBackgroundColor = "#f5dde3"  # Rosa muy suave — sidebar y tarjetas
+textColor = "#3a1a20"             # Oscuro cálido — texto principal legible sobre fondo crema
