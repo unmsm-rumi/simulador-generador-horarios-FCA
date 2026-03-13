@@ -10,6 +10,28 @@ EXCEL_PATH = BASE_DIR / "cursos_simulador.xlsx"
 
 st.set_page_config(layout="wide")
 
+# Color del sidebar igual al fondo del logo
+st.markdown("""
+<style>
+[data-testid="stSidebar"] {
+    background-color: #c85c72 !important;
+}
+[data-testid="stSidebar"] * {
+    color: white !important;
+}
+[data-testid="stSidebar"] .stSelectbox > div > div {
+    background-color: rgba(255,255,255,0.15) !important;
+    border-color: rgba(255,255,255,0.3) !important;
+    color: white !important;
+}
+[data-testid="stSidebar"] button {
+    background-color: rgba(255,255,255,0.2) !important;
+    border-color: rgba(255,255,255,0.4) !important;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Logo Rumi en la esquina superior izquierda del sidebar
 LOGO_PATH = BASE_DIR / "logo.png"
 if LOGO_PATH.exists():
