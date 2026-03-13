@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import textwrap
-from itertools import product
 
 st.set_page_config(layout="wide")
 
@@ -63,6 +62,26 @@ def fmt_seccion(val):
         return str(int(float(val)))
     except:
         return str(val) if pd.notna(val) else "Sin sección"
+
+
+def tiene_horario_valido(row):
+    """Retorna True si la fila tiene al menos una sesión con día y horas válidas."""
+    dia1 = str(row.get("dia 1", "")).strip()
+    if dia1 not in ["", "nan", "None"]:
+        inicio = pd.to_datetime(row.get("hora inicio 1", ""), errors="coerce")
+        fin = pd.to_datetime(row.get("hora fin 1", ""), errors="coerce")
+        if pd.notna(inicio) and pd.notna(fin):
+            return True
+
+    if tiene_sesion2_global:
+        dia2 = str(row.get(COL_DIA2, "")).strip()
+        if dia2 not in ["", "nan", "None"]:
+            inicio = pd.to_datetime(row.get("hora inicio 2", ""), errors="coerce")
+            fin = pd.to_datetime(row.get("hora fin 2", ""), errors="coerce")
+            if pd.notna(inicio) and pd.notna(fin):
+                return True
+
+    return False
 
 
 def obtener_sesiones(row):
@@ -134,6 +153,49 @@ def detectar_cruces(df_horario):
 
     return conflictos
 
+
+def construir_opcion(row):
+    """
+    Construye el texto de la opción para el selectbox de secciones.
+    Si no hay horario válido, indica claramente 'Sin horario asignado'.
+    """
+    docente = str(row.get("docente", "")).strip()
+    if not docente or docente in ["nan", "None", ""]:
+        docente = "Sin docente"
+
+    seccion = fmt_seccion(row.get("seccion", ""))
+
+    # Intenta construir sesión 1
+    dia1 = str(row.get("dia 1", "")).strip()
+    sesion1_texto = None
+    if dia1 not in ["", "nan", "None"]:
+        inicio = pd.to_datetime(row.get("hora inicio 1", ""), errors="coerce")
+        fin = pd.to_datetime(row.get("hora fin 1", ""), errors="coerce")
+        if pd.notna(inicio) and pd.notna(fin):
+            sesion1_texto = f"{dia1} ({inicio.strftime('%H:%M')}-{fin.strftime('%H:%M')})"
+
+    # Intenta construir sesión 2
+    sesion2_texto = None
+    if tiene_sesion2_global:
+        dia2 = str(row.get(COL_DIA2, "")).strip()
+        if dia2 not in ["", "nan", "None"]:
+            inicio2 = pd.to_datetime(row.get("hora inicio 2", ""), errors="coerce")
+            fin2 = pd.to_datetime(row.get("hora fin 2", ""), errors="coerce")
+            if pd.notna(inicio2) and pd.notna(fin2):
+                sesion2_texto = f"{dia2} ({inicio2.strftime('%H:%M')}-{fin2.strftime('%H:%M')})"
+
+    # Armar texto final
+    if sesion1_texto and sesion2_texto:
+        horario_texto = f"{sesion1_texto} y {sesion2_texto}"
+    elif sesion1_texto:
+        horario_texto = sesion1_texto
+    elif sesion2_texto:
+        horario_texto = sesion2_texto
+    else:
+        horario_texto = "⚠️ Sin horario asignado"
+
+    return f"{docente} - Sección {seccion} | {horario_texto}"
+
 # ------------------------------------------------
 # BOTÓN REINICIAR
 # ------------------------------------------------
@@ -200,27 +262,18 @@ if "cursos_elegidos" in st.session_state:
 
         curso_df = filtrado[filtrado["nombre del curso"] == curso].copy()
 
-        curso_df["docente"] = curso_df["docente"].fillna("Sin docente")
+        curso_df["docente"] = curso_df["docente"].fillna("Sin docente").astype(str).str.strip()
+        curso_df["docente"] = curso_df["docente"].replace({"": "Sin docente", "nan": "Sin docente", "None": "Sin docente"})
         curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
-
-        def construir_opcion(row):
-
-            sesion1 = f"{row['dia 1']} ({row['hora inicio 1']}-{row['hora fin 1']})"
-
-            if tiene_sesion2_global:
-
-                dia2 = str(row.get(COL_DIA2,"")).strip()
-
-                if dia2 not in ["","nan","None"]:
-
-                    sesion2 = f"{row[COL_DIA2]} ({row['hora inicio 2']}-{row['hora fin 2']})"
-                    return f"{row['docente']} - Sección {row['seccion']} | {sesion1} y {sesion2}"
-
-            return f"{row['docente']} - Sección {row['seccion']} | {sesion1}"
 
         curso_df["opcion"] = curso_df.apply(construir_opcion, axis=1)
 
         opciones = curso_df["opcion"].tolist()
+
+        # Si todas las opciones son sin horario, mostrar aviso pero igual dejarlas seleccionables
+        todas_sin_horario = all("Sin horario asignado" in op for op in opciones)
+        if todas_sin_horario:
+            st.warning(f"⚠️ **{curso}**: ninguna sección tiene horario asignado aún. Se incluirá en el resumen pero no aparecerá en el gráfico.")
 
         seleccion = st.selectbox(curso, opciones, key=f"select_{curso}")
 
@@ -253,14 +306,25 @@ if "cursos_elegidos" in st.session_state:
 
             fig = go.Figure()
 
-            for i,row in horario.iterrows():
+            cursos_con_horario = 0
 
+            for i, row in horario.iterrows():
+
+                sesiones = obtener_sesiones(row)
+
+                if not sesiones:
+                    # Curso sin horario: no se grafica pero sí aparece en el resumen
+                    continue
+
+                cursos_con_horario += 1
                 color = palette[i % len(palette)]
                 text_color = "black" if color == "#fff7e4" else "white"
 
                 curso_texto = "<br>".join(textwrap.wrap(row["nombre del curso"], width=14))
 
-                sesiones = obtener_sesiones(row)
+                docente = str(row.get("docente", "Sin docente")).strip()
+                if not docente or docente in ["nan", "None", ""]:
+                    docente = "Sin docente"
 
                 for ses in sesiones:
 
@@ -269,7 +333,7 @@ if "cursos_elegidos" in st.session_state:
 
                     texto = (
                         curso_texto
-                        + "<br>" + row["docente"]
+                        + "<br>" + docente
                         + "<br>Sección " + fmt_seccion(row["seccion"])
                         + "<br>" + inicio.strftime("%H:%M") + " - " + fin.strftime("%H:%M")
                     )
@@ -288,23 +352,26 @@ if "cursos_elegidos" in st.session_state:
                         showlegend=False
                     ))
 
-            fig.update_layout(
-                height=700,
-                barmode="overlay",
-                xaxis=dict(
-                    title="Día",
-                    categoryorder="array",
-                    categoryarray=dias
-                ),
-                yaxis=dict(
-                    title="Hora",
-                    autorange="reversed"
-                ),
-                template="plotly_white"
-            )
+            if cursos_con_horario == 0:
+                st.warning("Ninguno de los cursos seleccionados tiene horario asignado. No se puede generar el gráfico.")
+            else:
+                fig.update_layout(
+                    height=700,
+                    barmode="overlay",
+                    xaxis=dict(
+                        title="Día",
+                        categoryorder="array",
+                        categoryarray=dias
+                    ),
+                    yaxis=dict(
+                        title="Hora",
+                        autorange="reversed"
+                    ),
+                    template="plotly_white"
+                )
 
-            st.subheader("Horario semanal")
-            st.plotly_chart(fig,use_container_width=True)
+                st.subheader("Horario semanal")
+                st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("Resumen de cursos")
             st.dataframe(horario)
