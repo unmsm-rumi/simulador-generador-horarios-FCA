@@ -300,7 +300,14 @@ if "cursos_elegidos" in st.session_state:
         if todas_sin_horario:
             st.warning(f"**{curso}**: ninguna seccion tiene horario asignado aun.")
 
-        seleccion = st.selectbox(f"**{curso}**", opciones, key=f"sel_{curso}")
+        NO_LLEVAR = "— No llevar este curso —"
+        opciones_con_skip = [NO_LLEVAR] + opciones
+
+        seleccion = st.selectbox(f"**{curso}**", opciones_con_skip, key=f"sel_{curso}")
+
+        if seleccion == NO_LLEVAR:
+            continue  # Omitir este curso del horario
+
         fila = curso_df[curso_df["opcion"] == seleccion].iloc[0]
         seleccionados.append(fila)
 
@@ -311,6 +318,10 @@ if "cursos_elegidos" in st.session_state:
     # ------------------------------------------------
 
     if st.button("Generar horario"):
+
+        if horario.empty:
+            st.warning("No has seleccionado ningún curso. Elige al menos uno para generar el horario.")
+            st.stop()
 
         conflictos = detectar_cruces(horario)
 
