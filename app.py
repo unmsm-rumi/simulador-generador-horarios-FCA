@@ -402,7 +402,7 @@ if "cursos_elegidos" in st.session_state:
                         y=cy,
                         text=label,
                         showarrow=False,
-                        font=dict(size=13, color=text_color),
+                        font=dict(size=10, color=text_color),
                         align="center",
                         xanchor="center",
                         yanchor="middle",
