@@ -16,7 +16,7 @@ st.title("Simulador de Horarios Universitarios")
 # PALETA DE COLORES
 # ------------------------------------------------
 
-palette = ["#e8a838","#4db8a4","#7b68ee","#e06b3a","#5ba35b","#d4a0d4"]
+palette = ["#c13850","#d55a68","#d86d80","#ef94a4","#fff7e4"]
 
 # ------------------------------------------------
 # CARGAR DATA
@@ -355,7 +355,7 @@ if "cursos_elegidos" in st.session_state:
                     color_idx += 1
 
                 color      = color_map[nombre]
-                text_color = "white"
+                text_color = "#3a1a20" if color == "#fff7e4" else "white"
 
                 docente = str(row.get("docente","Sin docente")).strip()
                 if not docente or docente in ["nan","None",""]:
