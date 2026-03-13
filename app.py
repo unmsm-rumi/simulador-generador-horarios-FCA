@@ -73,21 +73,41 @@ def fmt_seccion(val):
         return str(val) if pd.notna(val) else "Sin sección"
 
 
+def parsear_hora(val):
+    """Parsea un valor de hora en cualquier formato (string HH:MM, HH:MM:SS, datetime.time, etc.)"""
+    import datetime
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return pd.NaT
+    if isinstance(val, datetime.time):
+        return pd.Timestamp(f"2000-01-01 {val.hour:02d}:{val.minute:02d}")
+    s = str(val).strip()
+    if not s or s in ["nan", "None", ""]:
+        return pd.NaT
+    # Remove seconds if present (HH:MM:SS → HH:MM)
+    parts = s.split(":")
+    if len(parts) >= 2:
+        try:
+            return pd.Timestamp(f"2000-01-01 {int(parts[0]):02d}:{int(parts[1]):02d}")
+        except:
+            pass
+    return pd.to_datetime(val, errors="coerce")
+
+
 def obtener_sesiones(row):
     sesiones = []
 
     dia1 = str(row.get("dia 1","")).strip()
     if dia1 not in ["","nan","None"]:
-        inicio = pd.to_datetime(row["hora inicio 1"], errors="coerce")
-        fin    = pd.to_datetime(row["hora fin 1"],    errors="coerce")
+        inicio = parsear_hora(row["hora inicio 1"])
+        fin    = parsear_hora(row["hora fin 1"])
         if pd.notna(inicio) and pd.notna(fin):
             sesiones.append({"curso": row["nombre del curso"], "dia": dia1, "inicio": inicio, "fin": fin})
 
     if tiene_sesion2_global:
         dia2 = str(row.get(COL_DIA2,"")).strip()
         if dia2 not in ["","nan","None"]:
-            inicio = pd.to_datetime(row["hora inicio 2"], errors="coerce")
-            fin    = pd.to_datetime(row["hora fin 2"],    errors="coerce")
+            inicio = parsear_hora(row["hora inicio 2"])
+            fin    = parsear_hora(row["hora fin 2"])
             if pd.notna(inicio) and pd.notna(fin):
                 sesiones.append({"curso": row["nombre del curso"], "dia": dia2, "inicio": inicio, "fin": fin})
 
@@ -130,8 +150,8 @@ def construir_opcion(row):
     dia1 = str(row.get("dia 1","")).strip()
     ses1 = None
     if dia1 not in ["","nan","None"]:
-        ini = pd.to_datetime(row.get("hora inicio 1",""), errors="coerce")
-        fin = pd.to_datetime(row.get("hora fin 1",""),   errors="coerce")
+        ini = parsear_hora(row.get("hora inicio 1",""))
+        fin = parsear_hora(row.get("hora fin 1",""))
         if pd.notna(ini) and pd.notna(fin):
             ses1 = f"{dia1} {ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
 
@@ -140,8 +160,8 @@ def construir_opcion(row):
     if tiene_sesion2_global:
         dia2 = str(row.get(COL_DIA2,"")).strip()
         if dia2 not in ["","nan","None"]:
-            ini2 = pd.to_datetime(row.get("hora inicio 2",""), errors="coerce")
-            fin2 = pd.to_datetime(row.get("hora fin 2",""),   errors="coerce")
+            ini2 = parsear_hora(row.get("hora inicio 2",""))
+            fin2 = parsear_hora(row.get("hora fin 2",""))
             if pd.notna(ini2) and pd.notna(fin2):
                 ses2 = f"{dia2} {ini2.strftime('%H:%M')}-{fin2.strftime('%H:%M')}"
 
