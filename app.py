@@ -51,7 +51,7 @@ st.title("Simulador de Horarios Universitarios")
 # PALETA DE COLORES
 # ------------------------------------------------
 
-palette = ["#c85c72","#c85c72","#c85c72","#c85c72","#c85c72"]
+palette = ["#c85c72", "#c85c72", "#c85c72", "#c85c72", "#c85c72"]
 
 # ------------------------------------------------
 # CARGAR DATA
@@ -398,11 +398,10 @@ if "cursos_elegidos" in st.session_state:
             color_idx = 0
 
             dia_x    = {d: i for i, d in enumerate(dias_con_tilde)}
-            # También mapear versión sin tilde por si los datos vienen normalizados
             dia_x_nt = {d: i for i, d in enumerate(dias)}
             dia_x.update(dia_x_nt)
 
-            ancho_col = 0.45
+            ancho_col = 0.42  # ligeramente más angosto para que respire
 
             for _, row in horario.iterrows():
                 sesiones = obtener_sesiones(row)
@@ -434,16 +433,35 @@ if "cursos_elegidos" in st.session_state:
                     cy    = (y0 + y1) / 2
                     dur_h = y1 - y0
 
-                    nombre_corto = nombre if len(nombre) <= 22 else nombre[:20] + "…"
+                    hora_txt = f"{ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
 
-                    label = (
-                        f"<b>{nombre_corto}</b><br>"
-                        f"Sec.{fmt_seccion(row['seccion'])} | "
-                        f"{ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
-                    )
-                    if dur_h >= 1.5:
-                        label += f"<br>{docente}"
+                    # Adaptar contenido y tamaño de fuente según duración del bloque
+                    if dur_h < 0.75:
+                        # Bloque muy pequeño: solo hora
+                        label     = hora_txt
+                        font_size = 8
+                    elif dur_h < 1.25:
+                        # Bloque pequeño: nombre muy corto + hora
+                        n = nombre[:12] + "…" if len(nombre) > 12 else nombre
+                        label     = f"<b>{n}</b><br>{hora_txt}"
+                        font_size = 8
+                    elif dur_h < 2.0:
+                        # Bloque medio: nombre + hora
+                        n = nombre[:16] + "…" if len(nombre) > 16 else nombre
+                        label     = f"<b>{n}</b><br>{hora_txt}"
+                        font_size = 9
+                    else:
+                        # Bloque grande: nombre + sección + hora + docente
+                        n = nombre[:18] + "…" if len(nombre) > 18 else nombre
+                        d = docente[:18] + "…" if len(docente) > 18 else docente
+                        label = (
+                            f"<b>{n}</b><br>"
+                            f"Sec.{fmt_seccion(row['seccion'])} | {hora_txt}<br>"
+                            f"{d}"
+                        )
+                        font_size = 9
 
+                    # Rectángulo de color
                     fig.add_shape(
                         type="rect",
                         x0=cx - ancho_col, x1=cx + ancho_col,
@@ -453,17 +471,20 @@ if "cursos_elegidos" in st.session_state:
                         layer="below",
                     )
 
+                    # Texto centrado y acotado al bloque
                     fig.add_annotation(
                         x=cx,
                         y=cy,
                         text=label,
                         showarrow=False,
-                        font=dict(size=10, color=text_color),
+                        font=dict(size=font_size, color=text_color),
                         align="center",
                         xanchor="center",
                         yanchor="middle",
                         bgcolor="rgba(0,0,0,0)",
-                        borderpad=2,
+                        borderpad=1,
+                        # cliponaxis evita que el texto se renderice fuera del bloque
+                        cliponaxis=True,
                     )
 
             if not color_map:
@@ -471,7 +492,7 @@ if "cursos_elegidos" in st.session_state:
             else:
                 hora_min = 6
                 hora_max = 23
-                tickvals_y = [h + m / 60 for h in range(hora_min, hora_max + 1) for m in [0]]
+                tickvals_y = [h for h in range(hora_min, hora_max + 1)]
                 ticktext_y = [f"{h:02d}:00" for h in range(hora_min, hora_max + 1)]
 
                 n_dias = len(dias_con_tilde)
