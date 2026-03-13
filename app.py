@@ -25,14 +25,11 @@ palette = ["#c13850","#d86d80","#d55a68","#ef94a4","#fff7e4"]
 @st.cache_data
 def cargar_data():
     if not EXCEL_PATH.exists():
+        ruta = str(EXCEL_PATH)
         st.error(
-            f"No se encontro el archivo Excel.
-
-"
-            f"Ruta buscada: {EXCEL_PATH}
-
-"
-            f"Asegurate de que cursos_simulador.xlsx este en la misma carpeta que app.py en tu repositorio de GitHub."
+            "No se encontro el archivo Excel. "
+            "Ruta buscada: " + ruta + ". "
+            "Asegurate de que cursos_simulador.xlsx este en la misma carpeta que app.py en tu repositorio de GitHub."
         )
         st.stop()
     df = pd.read_excel(EXCEL_PATH)
