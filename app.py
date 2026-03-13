@@ -51,7 +51,7 @@ st.title("Simulador de Horarios Universitarios")
 # PALETA DE COLORES
 # ------------------------------------------------
 
-palette = ["#c85c72","#b84d63","#a83d53","#d4758a","#e8a0b0"]
+palette = ["#c85c72","#c85c72","#c85c72","#c85c72","#c85c72"]
 
 # ------------------------------------------------
 # CARGAR DATA
