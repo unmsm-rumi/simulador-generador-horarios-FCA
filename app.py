@@ -359,8 +359,9 @@ if "cursos_elegidos" in st.session_state:
                     )
 
                     fig.add_trace(go.Bar(
-                        x=[ses["dia"]],
-                        y=[(fin - ini).seconds / 3600],
+                        orientation="h",
+                        y=[ses["dia"]],
+                        x=[(fin - ini).seconds / 3600],
                         base=ini.hour + ini.minute / 60,
                         marker_color=color,
                         marker_line=dict(color="white", width=1),
@@ -369,6 +370,7 @@ if "cursos_elegidos" in st.session_state:
                         textposition="inside",
                         insidetextanchor="middle",
                         textfont=dict(size=11, color=text_color),
+                        textangle=0,
                         hoverinfo="skip",
                         showlegend=False,
                     ))
@@ -376,20 +378,31 @@ if "cursos_elegidos" in st.session_state:
             if not color_map:
                 st.warning("Ninguno de los cursos seleccionados tiene horario asignado.")
             else:
+                # Calcular rango de horas para el eje X
+                hora_min = 6
+                hora_max = 24
+                tickvals = list(range(hora_min, hora_max + 1))
+                ticktext = [f"{h:02d}:00" for h in tickvals]
+
                 fig.update_layout(
-                    height=700,
+                    height=500,
                     barmode="overlay",
                     xaxis=dict(
-                        title="Dia",
-                        categoryorder="array",
-                        categoryarray=dias_con_tilde,
+                        title="Hora",
+                        range=[hora_min, hora_max],
+                        tickvals=tickvals,
+                        ticktext=ticktext,
+                        showgrid=True,
+                        gridcolor="rgba(200,200,200,0.3)",
                     ),
                     yaxis=dict(
-                        title="Hora",
-                        autorange="reversed",
+                        title="Día",
+                        categoryorder="array",
+                        categoryarray=list(reversed(dias_con_tilde)),
+                        showgrid=False,
                     ),
                     template="plotly_white",
-                    margin=dict(t=20),
+                    margin=dict(t=20, l=120),
                 )
 
                 st.subheader("Horario semanal")
