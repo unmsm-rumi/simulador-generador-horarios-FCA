@@ -483,8 +483,6 @@ if "cursos_elegidos" in st.session_state:
                         yanchor="middle",
                         bgcolor="rgba(0,0,0,0)",
                         borderpad=1,
-                        # cliponaxis evita que el texto se renderice fuera del bloque
-                        cliponaxis=True,
                     )
 
             if not color_map:
