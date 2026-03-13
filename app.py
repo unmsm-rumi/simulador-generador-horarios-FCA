@@ -340,6 +340,10 @@ if "cursos_elegidos" in st.session_state:
             color_map = {}
             color_idx = 0
 
+            # Mapeo dia -> posicion X (columna)
+            dia_x = {d: i for i, d in enumerate(dias_con_tilde)}
+            ancho_col = 0.45  # ancho de cada bloque (de -0.45 a +0.45 del centro)
+
             for _, row in horario.iterrows():
                 sesiones = obtener_sesiones(row)
                 if not sesiones:
@@ -352,7 +356,6 @@ if "cursos_elegidos" in st.session_state:
 
                 color      = color_map[nombre]
                 text_color = "black" if color == "#fff7e4" else "white"
-                curso_txt  = "<br>".join(textwrap.wrap(nombre, width=14))
 
                 docente = str(row.get("docente","Sin docente")).strip()
                 if not docente or docente in ["nan","None",""]:
@@ -361,59 +364,83 @@ if "cursos_elegidos" in st.session_state:
                 for ses in sesiones:
                     ini = ses["inicio"]
                     fin = ses["fin"]
-                    txt = (
-                        curso_txt
-                        + "<br>" + docente
-                        + "<br>Sec." + fmt_seccion(row["seccion"])
-                        + " [" + str(row.get("sede","")) + "]"
-                        + "<br>" + ini.strftime("%H:%M") + " - " + fin.strftime("%H:%M")
+                    dia = ses["dia"]
+                    if dia not in dia_x:
+                        continue
+
+                    cx     = dia_x[dia]
+                    y0     = ini.hour + ini.minute / 60
+                    y1     = fin.hour + fin.minute / 60
+                    cy     = (y0 + y1) / 2
+                    dur_h  = y1 - y0
+
+                    # Nombre del curso cortado a 1 linea
+                    nombre_corto = nombre if len(nombre) <= 22 else nombre[:20] + "…"
+
+                    # Texto dentro del bloque: nombre + hora
+                    label = (
+                        f"<b>{nombre_corto}</b><br>"
+                        f"Sec.{fmt_seccion(row['seccion'])} | "
+                        f"{ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
+                    )
+                    if dur_h >= 1.5:
+                        label += f"<br>{docente}"
+
+                    # Rectangulo de color
+                    fig.add_shape(
+                        type="rect",
+                        x0=cx - ancho_col, x1=cx + ancho_col,
+                        y0=y0, y1=y1,
+                        fillcolor=color,
+                        line=dict(color="white", width=2),
+                        layer="below",
                     )
 
-                    fig.add_trace(go.Bar(
-                        orientation="h",
-                        y=[ses["dia"]],
-                        x=[(fin - ini).seconds / 3600],
-                        base=ini.hour + ini.minute / 60,
-                        marker_color=color,
-                        marker_line=dict(color="white", width=1),
-                        width=0.6,
-                        text=txt,
-                        textposition="inside",
-                        insidetextanchor="middle",
-                        textfont=dict(size=11, color=text_color),
-                        textangle=0,
-                        hoverinfo="skip",
-                        showlegend=False,
-                    ))
+                    # Texto centrado horizontal dentro del bloque
+                    fig.add_annotation(
+                        x=cx,
+                        y=cy,
+                        text=label,
+                        showarrow=False,
+                        font=dict(size=13, color=text_color),
+                        align="center",
+                        xanchor="center",
+                        yanchor="middle",
+                        bgcolor="rgba(0,0,0,0)",
+                        borderpad=2,
+                    )
 
             if not color_map:
                 st.warning("Ninguno de los cursos seleccionados tiene horario asignado.")
             else:
-                # Calcular rango de horas para el eje X
                 hora_min = 6
-                hora_max = 24
-                tickvals = list(range(hora_min, hora_max + 1))
-                ticktext = [f"{h:02d}:00" for h in tickvals]
+                hora_max = 23
+                tickvals_y = [h + m/60 for h in range(hora_min, hora_max+1) for m in [0]]
+                ticktext_y = [f"{h:02d}:00" for h in range(hora_min, hora_max+1)]
 
+                n_dias = len(dias_con_tilde)
                 fig.update_layout(
-                    height=500,
-                    barmode="overlay",
+                    height=750,
                     xaxis=dict(
-                        title="Hora",
-                        range=[hora_min, hora_max],
-                        tickvals=tickvals,
-                        ticktext=ticktext,
+                        tickvals=list(range(n_dias)),
+                        ticktext=dias_con_tilde,
+                        range=[-0.5, n_dias - 0.5],
                         showgrid=True,
-                        gridcolor="rgba(200,200,200,0.3)",
+                        gridcolor="rgba(200,200,200,0.5)",
+                        side="top",
+                        fixedrange=True,
                     ),
                     yaxis=dict(
-                        title="Día",
-                        categoryorder="array",
-                        categoryarray=list(reversed(dias_con_tilde)),
-                        showgrid=False,
+                        tickvals=tickvals_y,
+                        ticktext=ticktext_y,
+                        range=[hora_max, hora_min],  # invertido: horas crecen hacia abajo
+                        showgrid=True,
+                        gridcolor="rgba(200,200,200,0.5)",
+                        fixedrange=True,
                     ),
                     template="plotly_white",
-                    margin=dict(t=20, l=120),
+                    margin=dict(t=60, l=70, r=20, b=20),
+                    plot_bgcolor="white",
                 )
 
                 st.subheader("Horario semanal")
