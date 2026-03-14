@@ -879,13 +879,17 @@ else:
                     resumen_lines = []
                     for row in filas:
                         secs = obtener_sesiones(row)
+                        docente_r = str(row.get("docente","")).strip()
+                        if not docente_r or docente_r in ["nan","None",""]:
+                            docente_r = "Sin docente"
                         for ses in secs:
                             ini_str = ses["inicio"].strftime("%H:%M")
                             fin_str = ses["fin"].strftime("%H:%M")
                             resumen_lines.append(
                                 f"📚 **{row['nombre del curso']}** — "
                                 f"{ses['dia']} {ini_str}-{fin_str} | "
-                                f"Sec. {fmt_seccion(row['seccion'])}"
+                                f"Sec. {fmt_seccion(row['seccion'])} | "
+                                f"👤 {docente_r}"
                             )
                     for line in resumen_lines:
                         st.markdown(line)
