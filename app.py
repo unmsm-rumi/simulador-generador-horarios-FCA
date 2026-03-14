@@ -718,6 +718,12 @@ else:
 
         MAX_MOSTRAR = 4   # 1 principal + 3 alternativas
 
+        # Guardar combinaciones en session_state para paginación
+        if "comb_validas" not in st.session_state or st.session_state.get("comb_hash") != len(combinaciones_validas):
+            st.session_state.comb_validas = combinaciones_validas
+            st.session_state.comb_hash    = len(combinaciones_validas)
+            st.session_state.comb_pagina  = 0
+
         if not combinaciones_validas:
             st.error("😔 No se encontraron combinaciones disponibles con los bloqueos definidos.")
 
@@ -847,11 +853,25 @@ else:
                 "- Vuelve al Paso 1 y deselecciona algún curso conflictivo"
             )
         else:
-            st.success(f"✅ Se encontraron **{len(combinaciones_validas)}** combinación(es) válida(s). "
-                       f"Mostrando las mejores {min(len(combinaciones_validas), MAX_MOSTRAR)}.")
+            pagina       = st.session_state.get("comb_pagina", 0)
+            total        = len(combinaciones_validas)
+            inicio       = pagina * MAX_MOSTRAR
+            fin_pag      = min(inicio + MAX_MOSTRAR, total)
+            pagina_combis = combinaciones_validas[inicio:fin_pag]
+            total_paginas = (total + MAX_MOSTRAR - 1) // MAX_MOSTRAR
 
-            for i, (score, filas) in enumerate(combinaciones_validas[:MAX_MOSTRAR]):
-                etiqueta = "⭐ Opción Principal" if i == 0 else f"Alternativa {i}"
+            st.success(
+                f"✅ Se encontraron **{total}** combinación(es) válida(s). "
+                f"Mostrando **{inicio+1}–{fin_pag}** de {total} "
+                f"(página {pagina+1} de {total_paginas})."
+            )
+
+            for i, (score, filas) in enumerate(pagina_combis):
+                num_global = inicio + i
+                if num_global == 0:
+                    etiqueta = "⭐ Opción Principal"
+                else:
+                    etiqueta = f"Alternativa {num_global}"
                 with st.expander(etiqueta, expanded=(i==0)):
                     horario_df = pd.DataFrame(list(filas))
 
@@ -873,6 +893,28 @@ else:
                     st.markdown("---")
                     dibujar_horario(horario_df, bloqueos=bloqueos, titulo=f"Horario — {etiqueta}")
 
+            # ── Navegación de páginas ──
+            st.markdown("---")
+            nav1, nav2, nav3 = st.columns([1, 2, 1])
+            with nav1:
+                if pagina > 0:
+                    if st.button("← Opciones anteriores"):
+                        st.session_state.comb_pagina -= 1
+                        st.rerun()
+            with nav2:
+                st.markdown(
+                    f"<div style='text-align:center; color:gray; padding-top:6px;'>"
+                    f"Página {pagina+1} de {total_paginas} &nbsp;|&nbsp; "
+                    f"{total} combinaciones en total</div>",
+                    unsafe_allow_html=True
+                )
+            with nav3:
+                if fin_pag < total:
+                    if st.button("Ver otras opciones →"):
+                        st.session_state.comb_pagina += 1
+                        st.rerun()
+
         if st.button("🔄 Volver a ajustar bloqueos"):
+            st.session_state.comb_pagina = 0
             st.session_state.gen_paso = 2
             st.rerun()
