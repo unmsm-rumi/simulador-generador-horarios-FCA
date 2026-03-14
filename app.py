@@ -263,27 +263,67 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
     # Pintar bloqueos de horario primero (fondo gris)
     if bloqueos:
         for b in bloqueos:
-            dia_b = b["dia"].upper()
+            dia_b = b["dia"].upper().replace("É","E").replace("Á","A").replace("Ó","O")
             if dia_b not in dia_x: continue
             cx = dia_x[dia_b]
-            y0 = b["inicio_h"]
-            y1 = b["fin_h"]
+            y0_blk = b["inicio_h"]
+            y1_blk = b["fin_h"]
+            t_antes_h   = b.get("traslado_antes",  b.get("traslado", 0)) / 60.0
+            t_despues_h = b.get("traslado_despues", b.get("traslado", 0)) / 60.0
+
+            # Zona de traslado antes (más tenue)
+            if t_antes_h > 0:
+                fig.add_shape(
+                    type="rect",
+                    x0=cx-ancho_col, x1=cx+ancho_col,
+                    y0=y0_blk - t_antes_h, y1=y0_blk,
+                    fillcolor="rgba(150,150,150,0.18)",
+                    line=dict(color="rgba(120,120,120,0.3)", width=1, dash="dot"),
+                    layer="below",
+                )
+                fig.add_annotation(
+                    x=cx, y=y0_blk - t_antes_h/2,
+                    text=f"traslado<br>{b.get('traslado_antes',0)} min",
+                    showarrow=False,
+                    font=dict(size=7, color="rgba(80,80,80,0.7)"),
+                    align="center", xanchor="center", yanchor="middle",
+                )
+
+            # Bloque principal OCUPADO
             fig.add_shape(
                 type="rect",
                 x0=cx-ancho_col, x1=cx+ancho_col,
-                y0=y0, y1=y1,
-                fillcolor="rgba(100,100,100,0.35)",
-                line=dict(color="rgba(80,80,80,0.5)", width=1),
+                y0=y0_blk, y1=y1_blk,
+                fillcolor="rgba(100,100,100,0.40)",
+                line=dict(color="rgba(80,80,80,0.6)", width=1),
                 layer="below",
             )
-            cy = (y0+y1)/2
+            cy = (y0_blk + y1_blk) / 2
             fig.add_annotation(
                 x=cx, y=cy,
                 text="<b>OCUPADO</b>",
                 showarrow=False,
-                font=dict(size=8, color="rgba(60,60,60,0.8)"),
+                font=dict(size=8, color="rgba(50,50,50,0.9)"),
                 align="center", xanchor="center", yanchor="middle",
             )
+
+            # Zona de traslado después (más tenue)
+            if t_despues_h > 0:
+                fig.add_shape(
+                    type="rect",
+                    x0=cx-ancho_col, x1=cx+ancho_col,
+                    y0=y1_blk, y1=y1_blk + t_despues_h,
+                    fillcolor="rgba(150,150,150,0.18)",
+                    line=dict(color="rgba(120,120,120,0.3)", width=1, dash="dot"),
+                    layer="below",
+                )
+                fig.add_annotation(
+                    x=cx, y=y1_blk + t_despues_h/2,
+                    text=f"traslado<br>{b.get('traslado_despues',0)} min",
+                    showarrow=False,
+                    font=dict(size=7, color="rgba(80,80,80,0.7)"),
+                    align="center", xanchor="center", yanchor="middle",
+                )
 
     for _, row in horario_df.iterrows():
         sesiones = obtener_sesiones(row)
@@ -496,33 +536,53 @@ else:
 
         # Formulario para agregar bloqueo
         with st.expander("➕ Agregar bloqueo de horario", expanded=True):
-            c1,c2,c3,c4 = st.columns([2,2,2,3])
-            dia_blk  = c1.selectbox("Día",          DIAS_SEMANA, key="blk_dia")
-            hora_ini = c2.selectbox("Hora inicio",  MEDIAS,      key="blk_ini")
-            hora_fin = c3.selectbox("Hora fin",     MEDIAS,      key="blk_fin")
-            traslado = c4.selectbox(
-                "Traslado después (min)",
-                TRASLADOS,
-                index=1,   # default 30 min
-                key="blk_traslado",
-                help="¿Cuánto tiempo necesitas para llegar a la universidad DESPUÉS de este bloqueo? (15 min a 3 horas)"
+            c1,c2,c3 = st.columns([2,2,2])
+            dia_blk  = c1.selectbox("Día",         DIAS_SEMANA, key="blk_dia")
+            hora_ini = c2.selectbox("Hora inicio", MEDIAS,      key="blk_ini")
+            hora_fin = c3.selectbox("Hora fin",    MEDIAS,      key="blk_fin")
+
+            st.markdown("**🚌 Tiempos de traslado**")
+            ct1, ct2 = st.columns(2)
+            traslado_antes = ct1.selectbox(
+                "Antes del bloqueo (min)",
+                [0] + TRASLADOS,
+                index=0,
+                key="blk_traslado_antes",
+                help="¿Cuánto tiempo necesitas para llegar desde la universidad a tu actividad ANTES de que empiece? "
+                     "Ejemplo: si trabajas a las 14:00 y tardas 1h, el sistema bloqueará clases que terminen después de las 13:00."
             )
-            st.caption("💡 Si no necesitas traslado para este bloqueo, elige **15 min** como mínimo.")
+            traslado_despues = ct2.selectbox(
+                "Después del bloqueo (min)",
+                [0] + TRASLADOS,
+                index=2,
+                key="blk_traslado_despues",
+                help="¿Cuánto tiempo necesitas para llegar desde tu actividad de vuelta a la universidad DESPUÉS de que termine? "
+                     "Ejemplo: si tu trabajo termina a las 18:00 y tardas 1.5h, el sistema bloqueará clases que empiecen antes de las 19:30."
+            )
+            st.caption(
+                "💡 **Antes**: tiempo univ → tu actividad &nbsp;|&nbsp; "
+                "**Después**: tiempo tu actividad → univ. Pon 0 si no aplica."
+            )
             if st.button("➕ Agregar este bloqueo"):
                 ini_h = int(hora_ini.split(":")[0]) + int(hora_ini.split(":")[1])/60
                 fin_h = int(hora_fin.split(":")[0]) + int(hora_fin.split(":")[1])/60
                 if fin_h <= ini_h:
                     st.error("⚠️ La hora de fin debe ser mayor a la de inicio.")
                 else:
+                    resumen_traslado = []
+                    if traslado_antes > 0:  resumen_traslado.append(f"antes: {traslado_antes} min")
+                    if traslado_despues > 0: resumen_traslado.append(f"después: {traslado_despues} min")
+                    traslado_txt = " | ".join(resumen_traslado) if resumen_traslado else "sin traslado"
                     st.session_state.gen_bloqueos.append({
-                        "dia":      dia_blk,
-                        "inicio":   hora_ini,
-                        "fin":      hora_fin,
-                        "inicio_h": ini_h,
-                        "fin_h":    fin_h,
-                        "traslado": traslado,
+                        "dia":              dia_blk,
+                        "inicio":           hora_ini,
+                        "fin":              hora_fin,
+                        "inicio_h":         ini_h,
+                        "fin_h":            fin_h,
+                        "traslado_antes":   traslado_antes,
+                        "traslado_despues": traslado_despues,
                     })
-                    st.success(f"✅ Agregado: {dia_blk} {hora_ini}–{hora_fin} | traslado: {traslado} min")
+                    st.success(f"✅ Agregado: {dia_blk} {hora_ini}–{hora_fin} | {traslado_txt}")
                     st.rerun()
 
         # Mostrar bloqueos actuales agrupados por día
@@ -541,10 +601,16 @@ else:
                 st.markdown(f"**📅 {dia_g}**")
                 for i, b in bloqueos_dia:
                     col_b1, col_b2 = st.columns([5,1])
+                    partes_traslado = []
+                    if b.get("traslado_antes", 0) > 0:
+                        partes_traslado.append(f"antes: <b>{b['traslado_antes']} min</b>")
+                    if b.get("traslado_despues", 0) > 0:
+                        partes_traslado.append(f"después: <b>{b['traslado_despues']} min</b>")
+                    traslado_txt_display = " | ".join(partes_traslado) if partes_traslado else "sin traslado"
                     col_b1.markdown(
                         f"<div class='bloqueo-row'>🚫 &nbsp;"
                         f"{b['inicio']} – {b['fin']} &nbsp;|&nbsp; "
-                        f"🚌 traslado: <b>{b['traslado']} min</b></div>",
+                        f"🚌 {traslado_txt_display}</div>",
                         unsafe_allow_html=True
                     )
                     if col_b2.button("❌", key=f"del_blk_{i}"):
@@ -575,17 +641,20 @@ else:
             bloqueos_por_dia[dia_norm].append(b)
 
         def sesion_tiene_conflicto(dia, ini_h, fin_h):
-            """True si la sesión se solapa o viola el margen con algún bloqueo."""
+            """True si la sesión se solapa o viola los márgenes de traslado con algún bloqueo."""
             dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
             for b in bloqueos_por_dia.get(dia_norm,[]):
-                blk_ini = b["inicio_h"]
-                blk_fin = b["fin_h"]
-                traslado_h = b["traslado"] / 60.0
-                # Solapamiento directo
-                if ini_h < blk_fin and fin_h > blk_ini:
-                    return True
-                # Clase empieza antes de que termine traslado post-bloqueo
-                if ini_h >= blk_fin and ini_h < blk_fin + traslado_h:
+                blk_ini        = b["inicio_h"]
+                blk_fin        = b["fin_h"]
+                t_antes_h      = b.get("traslado_antes",  b.get("traslado", 0)) / 60.0
+                t_despues_h    = b.get("traslado_despues", b.get("traslado", 0)) / 60.0
+
+                # Zona bloqueada efectiva = (blk_ini - t_antes) hasta (blk_fin + t_despues)
+                zona_ini = blk_ini - t_antes_h
+                zona_fin = blk_fin + t_despues_h
+
+                # Solapamiento con zona bloqueada ampliada
+                if ini_h < zona_fin and fin_h > zona_ini:
                     return True
             return False
 
@@ -671,26 +740,37 @@ else:
                         dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
 
                         for b in bloqueos_por_dia.get(dia_norm, []):
-                            blk_ini    = b["inicio_h"]
-                            blk_fin    = b["fin_h"]
-                            traslado_h = b["traslado"] / 60.0
+                            blk_ini     = b["inicio_h"]
+                            blk_fin     = b["fin_h"]
+                            t_antes_h   = b.get("traslado_antes",  b.get("traslado", 0)) / 60.0
+                            t_despues_h = b.get("traslado_despues", b.get("traslado", 0)) / 60.0
+                            zona_ini    = blk_ini - t_antes_h
+                            zona_fin    = blk_fin + t_despues_h
 
-                            if ini_h < blk_fin and fin_h > blk_ini:
-                                razon = (
-                                    f"el **{dia}** de {ses['inicio'].strftime('%H:%M')} a "
-                                    f"{ses['fin'].strftime('%H:%M')} se superpone con tu bloqueo "
-                                    f"{b['inicio']}–{b['fin']}"
-                                )
-                                secciones_bloqueadas.append((fmt_seccion(row["seccion"]), razon))
-                                conflicto_encontrado = True
-                                break
-                            elif ini_h >= blk_fin and ini_h < blk_fin + traslado_h:
-                                mins_falta = int((blk_fin + traslado_h - ini_h) * 60)
-                                razon = (
-                                    f"el **{dia}** a las {ses['inicio'].strftime('%H:%M')} no da tiempo: "
-                                    f"tu bloqueo termina a las {b['fin']} y necesitas {b['traslado']} min "
-                                    f"de traslado (faltan ~{mins_falta} min)"
-                                )
+                            if ini_h < zona_fin and fin_h > zona_ini:
+                                # Determinar tipo de conflicto para mensaje claro
+                                if ini_h < blk_fin and fin_h > blk_ini:
+                                    razon = (
+                                        f"el **{dia}** de {ses['inicio'].strftime('%H:%M')} a "
+                                        f"{ses['fin'].strftime('%H:%M')} se superpone directamente "
+                                        f"con tu bloqueo {b['inicio']}–{b['fin']}"
+                                    )
+                                elif fin_h > zona_ini and ini_h < blk_ini:
+                                    mins_falta = int((fin_h - zona_ini) * 60)
+                                    razon = (
+                                        f"el **{dia}** la clase termina a {ses['fin'].strftime('%H:%M')} "
+                                        f"y no llegarías a tiempo: necesitas salir a las "
+                                        f"{int(zona_ini):02d}:{int((zona_ini%1)*60):02d} "
+                                        f"({b['traslado_antes']} min de traslado antes de las {b['inicio']})"
+                                    )
+                                else:
+                                    mins_falta = int((zona_fin - ini_h) * 60)
+                                    razon = (
+                                        f"el **{dia}** a las {ses['inicio'].strftime('%H:%M')} no da tiempo: "
+                                        f"tu bloqueo termina a las {b['fin']} y necesitas "
+                                        f"{b.get('traslado_despues', b.get('traslado',0))} min de traslado "
+                                        f"(faltan ~{mins_falta} min)"
+                                    )
                                 secciones_bloqueadas.append((fmt_seccion(row["seccion"]), razon))
                                 conflicto_encontrado = True
                                 break
