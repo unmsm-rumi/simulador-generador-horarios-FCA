@@ -721,83 +721,128 @@ else:
         if not combinaciones_validas:
             st.error("😔 No se encontraron combinaciones disponibles con los bloqueos definidos.")
 
-            # --- DIAGNÓSTICO DETALLADO ---
-            st.markdown("### 🔍 ¿Por qué no hay combinaciones?")
-            st.markdown("Revisamos cada curso para explicarte exactamente el problema:")
+            # ─── Recopilar diagnóstico completo ───
+            # Por curso: {curso -> {sec -> [(dia, ini, fin, razon_corta)]}}
+            diag_cursos = {}
+            # Por día: {dia -> [(curso, sec, ini, fin, razon_corta)]}
+            diag_dias   = {}
+
+            def razon_conflicto(dia, ses, b):
+                ini_h = ses["inicio"].hour + ses["inicio"].minute/60
+                fin_h = ses["fin"].hour   + ses["fin"].minute/60
+                blk_ini     = b["inicio_h"]
+                blk_fin     = b["fin_h"]
+                t_antes_h   = b.get("traslado_antes",  0) / 60.0
+                t_despues_h = b.get("traslado_despues", 0) / 60.0
+                zona_ini    = blk_ini - t_antes_h
+                zona_fin    = blk_fin + t_despues_h
+                ini_str = ses["inicio"].strftime("%H:%M")
+                fin_str = ses["fin"].strftime("%H:%M")
+
+                if ini_h < blk_fin and fin_h > blk_ini:
+                    return (
+                        f"clase {ini_str}–{fin_str} se superpone con bloqueo {b['inicio']}–{b['fin']}"
+                    )
+                elif fin_h > zona_ini and ini_h < blk_ini:
+                    salida = f"{int(zona_ini):02d}:{int((zona_ini%1)*60):02d}"
+                    return (
+                        f"clase {ini_str}–{fin_str} termina tarde: necesitas salir a las {salida} "
+                        f"para llegar al bloqueo {b['inicio']} ({b.get('traslado_antes',0)} min traslado)"
+                    )
+                else:
+                    zona_fin_str = f"{int(zona_fin):02d}:{int((zona_fin%1)*60):02d}"
+                    return (
+                        f"clase {ini_str}–{fin_str} empieza muy pronto: bloqueo termina {b['fin']} "
+                        f"+ {b.get('traslado_despues',0)} min traslado → libre recién a las {zona_fin_str}"
+                    )
 
             for curso in cursos_ok:
                 filas_curso = opciones_por_curso.get(curso, [])
-                secciones_bloqueadas = []
-                secciones_libres     = []
+                diag_cursos[curso] = {"bloqueadas": [], "libres": []}
 
                 for row in filas_curso:
+                    sec = fmt_seccion(row["seccion"])
                     sesiones = obtener_sesiones(row)
                     conflicto_encontrado = False
                     for ses in sesiones:
-                        ini_h = ses["inicio"].hour + ses["inicio"].minute/60
-                        fin_h = ses["fin"].hour   + ses["fin"].minute/60
-                        dia   = ses["dia"]
+                        ini_h    = ses["inicio"].hour + ses["inicio"].minute/60
+                        fin_h    = ses["fin"].hour   + ses["fin"].minute/60
+                        dia      = ses["dia"]
                         dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
 
                         for b in bloqueos_por_dia.get(dia_norm, []):
                             blk_ini     = b["inicio_h"]
                             blk_fin     = b["fin_h"]
-                            t_antes_h   = b.get("traslado_antes",  b.get("traslado", 0)) / 60.0
-                            t_despues_h = b.get("traslado_despues", b.get("traslado", 0)) / 60.0
+                            t_antes_h   = b.get("traslado_antes",  0) / 60.0
+                            t_despues_h = b.get("traslado_despues", 0) / 60.0
                             zona_ini    = blk_ini - t_antes_h
                             zona_fin    = blk_fin + t_despues_h
 
                             if ini_h < zona_fin and fin_h > zona_ini:
-                                # Determinar tipo de conflicto para mensaje claro
-                                if ini_h < blk_fin and fin_h > blk_ini:
-                                    razon = (
-                                        f"el **{dia}** de {ses['inicio'].strftime('%H:%M')} a "
-                                        f"{ses['fin'].strftime('%H:%M')} se superpone directamente "
-                                        f"con tu bloqueo {b['inicio']}–{b['fin']}"
-                                    )
-                                elif fin_h > zona_ini and ini_h < blk_ini:
-                                    mins_falta = int((fin_h - zona_ini) * 60)
-                                    razon = (
-                                        f"el **{dia}** la clase termina a {ses['fin'].strftime('%H:%M')} "
-                                        f"y no llegarías a tiempo: necesitas salir a las "
-                                        f"{int(zona_ini):02d}:{int((zona_ini%1)*60):02d} "
-                                        f"({b['traslado_antes']} min de traslado antes de las {b['inicio']})"
-                                    )
-                                else:
-                                    mins_falta = int((zona_fin - ini_h) * 60)
-                                    razon = (
-                                        f"el **{dia}** a las {ses['inicio'].strftime('%H:%M')} no da tiempo: "
-                                        f"tu bloqueo termina a las {b['fin']} y necesitas "
-                                        f"{b.get('traslado_despues', b.get('traslado',0))} min de traslado "
-                                        f"(faltan ~{mins_falta} min)"
-                                    )
-                                secciones_bloqueadas.append((fmt_seccion(row["seccion"]), razon))
+                                razon = razon_conflicto(dia, ses, b)
+                                diag_cursos[curso]["bloqueadas"].append((sec, dia, ses["inicio"].strftime("%H:%M"), ses["fin"].strftime("%H:%M"), razon))
+                                # Registrar también por día
+                                if dia not in diag_dias:
+                                    diag_dias[dia] = []
+                                diag_dias[dia].append((curso, sec, ses["inicio"].strftime("%H:%M"), ses["fin"].strftime("%H:%M"), razon))
                                 conflicto_encontrado = True
                                 break
                         if conflicto_encontrado:
                             break
 
                     if not conflicto_encontrado:
-                        secciones_libres.append(fmt_seccion(row["seccion"]))
+                        diag_cursos[curso]["libres"].append(sec)
 
-                if not secciones_bloqueadas:
-                    st.success(f"✅ **{curso}**: todas sus secciones son compatibles con tus bloqueos.")
-                elif secciones_libres:
-                    st.warning(
-                        f"⚠️ **{curso}**: algunas secciones tienen conflicto, "
-                        f"pero las secciones {', '.join(secciones_libres)} sí están disponibles. "
-                        f"El problema puede ser la combinación con otro curso."
-                    )
+            # ─── VISTA 1: Por curso ───
+            st.markdown("### 📚 Diagnóstico por curso")
+            for curso in cursos_ok:
+                info  = diag_cursos[curso]
+                libres     = info["libres"]
+                bloqueadas = info["bloqueadas"]
+
+                if not bloqueadas:
+                    st.success(f"✅ **{curso}** — todas sus secciones son compatibles.")
+                elif libres:
+                    with st.expander(f"⚠️ {curso} — secciones {', '.join(libres)} disponibles, otras con conflicto"):
+                        st.markdown(f"Las secciones **{', '.join(libres)}** no tienen conflicto con tus bloqueos, "
+                                    f"pero no combinan bien con otro curso seleccionado.")
+                        st.markdown("**Secciones con conflicto:**")
+                        for sec, dia, ini, fin, razon in bloqueadas:
+                            st.markdown(f"- Sec. **{sec}** — {razon}")
                 else:
-                    st.error(f"❌ **{curso}**: **ninguna sección** es compatible con tus bloqueos.")
-                    with st.expander(f"Ver detalle — {curso}"):
-                        for sec, razon in secciones_bloqueadas:
-                            st.markdown(f"- Sección **{sec}**: {razon}")
+                    with st.expander(f"❌ {curso} — ninguna sección disponible"):
+                        st.markdown("**Todas las secciones tienen conflicto:**")
+                        for sec, dia, ini, fin, razon in bloqueadas:
+                            st.markdown(f"- Sec. **{sec}** — {razon}")
+
+            # ─── VISTA 2: Por día ───
+            if diag_dias:
+                st.markdown("### 📅 Diagnóstico por día")
+                ORDEN_DIAS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
+                dias_ordenados = [d for d in ORDEN_DIAS if d in diag_dias] +                                  [d for d in diag_dias if d not in ORDEN_DIAS]
+                for dia in dias_ordenados:
+                    conflictos_dia = diag_dias[dia]
+                    cursos_afectados = list(dict.fromkeys([c[0] for c in conflictos_dia]))
+                    with st.expander(f"📅 {dia} — {len(conflictos_dia)} conflicto(s) en {len(cursos_afectados)} curso(s)"):
+                        # Mostrar los bloqueos de ese día
+                        dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
+                        blqs = bloqueos_por_dia.get(dia_norm, [])
+                        if blqs:
+                            st.markdown("**Tus bloqueos ese día:**")
+                            for b in blqs:
+                                partes = []
+                                if b.get("traslado_antes",  0) > 0: partes.append(f"traslado antes: {b['traslado_antes']} min")
+                                if b.get("traslado_despues",0) > 0: partes.append(f"traslado después: {b['traslado_despues']} min")
+                                extras = f" ({', '.join(partes)})" if partes else ""
+                                st.markdown(f"- 🚫 {b['inicio']}–{b['fin']}{extras}")
+                        st.markdown("**Secciones que no pueden ir ese día:**")
+                        for curso, sec, ini, fin, razon in conflictos_dia:
+                            st.markdown(f"- **{curso}** Sec.{sec} ({ini}–{fin}): {razon}")
 
             st.markdown("---")
             st.info(
                 "💡 **Sugerencias para encontrar combinaciones:**\n"
-                "- Reduce el tiempo de traslado en algún bloqueo\n"
+                "- Reduce el tiempo de traslado en el día con más conflictos\n"
                 "- Elimina un bloqueo que no sea estrictamente necesario\n"
                 "- Vuelve al Paso 1 y deselecciona algún curso conflictivo"
             )
