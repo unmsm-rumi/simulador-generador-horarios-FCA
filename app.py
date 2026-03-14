@@ -481,14 +481,15 @@ else:
     if st.session_state.get("gen_paso",1) >= 2 and "gen_cursos" in st.session_state:
 
         st.header("Paso 2: Define los horarios en que NO puedes asistir")
-        st.markdown(
-            "Para cada día ocupado, indica las horas bloqueadas y cuánto tiempo "
-            "necesitas de traslado **después** del bloqueo antes de llegar a la universidad."
+        st.info(
+            "➕ **Puedes agregar tantos bloqueos como necesites**, incluso varios en el mismo día. "
+            "Ejemplo: Lunes 08:00-12:00 (trabajo mañana) y Lunes 19:00-22:00 (trabajo noche) "
+            "→ así el generador sabe que solo tienes libre el lunes en la tarde."
         )
 
         DIAS_SEMANA = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
-        HORAS = [f"{h:02d}:00" for h in range(5,24)]
         MEDIAS = [f"{h:02d}:{m:02d}" for h in range(5,24) for m in [0,30]]
+        TRASLADOS = list(range(15, 181, 15))  # 15, 30, 45, ... 180
 
         if "gen_bloqueos" not in st.session_state:
             st.session_state.gen_bloqueos = []
@@ -496,47 +497,59 @@ else:
         # Formulario para agregar bloqueo
         with st.expander("➕ Agregar bloqueo de horario", expanded=True):
             c1,c2,c3,c4 = st.columns([2,2,2,3])
-            dia_blk    = c1.selectbox("Día",         DIAS_SEMANA, key="blk_dia")
-            hora_ini   = c2.selectbox("Hora inicio", MEDIAS,       key="blk_ini")
-            hora_fin   = c3.selectbox("Hora fin",    MEDIAS,       key="blk_fin")
-            traslado   = c4.selectbox(
-                "Traslado después (minutos)",
-                [0,15,30,45,60,90,120],
-                index=2,
+            dia_blk  = c1.selectbox("Día",          DIAS_SEMANA, key="blk_dia")
+            hora_ini = c2.selectbox("Hora inicio",  MEDIAS,      key="blk_ini")
+            hora_fin = c3.selectbox("Hora fin",     MEDIAS,      key="blk_fin")
+            traslado = c4.selectbox(
+                "Traslado después (min)",
+                TRASLADOS,
+                index=1,   # default 30 min
                 key="blk_traslado",
-                help="¿Cuánto tiempo necesitas para llegar a la universidad después de este bloqueo?"
+                help="¿Cuánto tiempo necesitas para llegar a la universidad DESPUÉS de este bloqueo? (15 min a 3 horas)"
             )
-            if st.button("Agregar bloqueo"):
+            st.caption("💡 Si no necesitas traslado para este bloqueo, elige **15 min** como mínimo.")
+            if st.button("➕ Agregar este bloqueo"):
                 ini_h = int(hora_ini.split(":")[0]) + int(hora_ini.split(":")[1])/60
                 fin_h = int(hora_fin.split(":")[0]) + int(hora_fin.split(":")[1])/60
                 if fin_h <= ini_h:
-                    st.error("La hora de fin debe ser mayor a la de inicio.")
+                    st.error("⚠️ La hora de fin debe ser mayor a la de inicio.")
                 else:
                     st.session_state.gen_bloqueos.append({
-                        "dia":       dia_blk,
-                        "inicio":    hora_ini,
-                        "fin":       hora_fin,
-                        "inicio_h":  ini_h,
-                        "fin_h":     fin_h,
-                        "traslado":  traslado,
+                        "dia":      dia_blk,
+                        "inicio":   hora_ini,
+                        "fin":      hora_fin,
+                        "inicio_h": ini_h,
+                        "fin_h":    fin_h,
+                        "traslado": traslado,
                     })
-                    st.success(f"Bloqueo agregado: {dia_blk} {hora_ini}-{hora_fin} (traslado: {traslado} min)")
+                    st.success(f"✅ Agregado: {dia_blk} {hora_ini}–{hora_fin} | traslado: {traslado} min")
                     st.rerun()
 
-        # Mostrar bloqueos actuales
+        # Mostrar bloqueos actuales agrupados por día
         if st.session_state.gen_bloqueos:
-            st.markdown("**Bloqueos actuales:**")
-            for i, b in enumerate(st.session_state.gen_bloqueos):
-                col_b1, col_b2 = st.columns([5,1])
-                col_b1.markdown(
-                    f"<div class='bloqueo-row'>🚫 <b>{b['dia']}</b> &nbsp; "
-                    f"{b['inicio']} – {b['fin']} &nbsp;|&nbsp; "
-                    f"🚌 traslado: <b>{b['traslado']} min</b></div>",
-                    unsafe_allow_html=True
-                )
-                if col_b2.button("❌", key=f"del_blk_{i}"):
-                    st.session_state.gen_bloqueos.pop(i)
-                    st.rerun()
+            st.markdown(f"**Bloqueos actuales ({len(st.session_state.gen_bloqueos)} en total):**")
+            st.caption("Puedes seguir agregando más bloqueos arriba o eliminar alguno con ❌")
+
+            # Agrupar por día para mostrar más ordenado
+            dias_con_bloqueo = []
+            for b in st.session_state.gen_bloqueos:
+                if b["dia"] not in dias_con_bloqueo:
+                    dias_con_bloqueo.append(b["dia"])
+
+            for dia_g in dias_con_bloqueo:
+                bloqueos_dia = [(i,b) for i,b in enumerate(st.session_state.gen_bloqueos) if b["dia"]==dia_g]
+                st.markdown(f"**📅 {dia_g}**")
+                for i, b in bloqueos_dia:
+                    col_b1, col_b2 = st.columns([5,1])
+                    col_b1.markdown(
+                        f"<div class='bloqueo-row'>🚫 &nbsp;"
+                        f"{b['inicio']} – {b['fin']} &nbsp;|&nbsp; "
+                        f"🚌 traslado: <b>{b['traslado']} min</b></div>",
+                        unsafe_allow_html=True
+                    )
+                    if col_b2.button("❌", key=f"del_blk_{i}"):
+                        st.session_state.gen_bloqueos.pop(i)
+                        st.rerun()
 
         st.markdown("---")
         col_gen1, col_gen2 = st.columns([1,3])
@@ -637,9 +650,76 @@ else:
         MAX_MOSTRAR = 4   # 1 principal + 3 alternativas
 
         if not combinaciones_validas:
-            st.error(
-                "😔 No se encontraron combinaciones disponibles con los bloqueos definidos. "
-                "Intenta reducir los tiempos de traslado o eliminar algún bloqueo."
+            st.error("😔 No se encontraron combinaciones disponibles con los bloqueos definidos.")
+
+            # --- DIAGNÓSTICO DETALLADO ---
+            st.markdown("### 🔍 ¿Por qué no hay combinaciones?")
+            st.markdown("Revisamos cada curso para explicarte exactamente el problema:")
+
+            for curso in cursos_ok:
+                filas_curso = opciones_por_curso.get(curso, [])
+                secciones_bloqueadas = []
+                secciones_libres     = []
+
+                for row in filas_curso:
+                    sesiones = obtener_sesiones(row)
+                    conflicto_encontrado = False
+                    for ses in sesiones:
+                        ini_h = ses["inicio"].hour + ses["inicio"].minute/60
+                        fin_h = ses["fin"].hour   + ses["fin"].minute/60
+                        dia   = ses["dia"]
+                        dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
+
+                        for b in bloqueos_por_dia.get(dia_norm, []):
+                            blk_ini    = b["inicio_h"]
+                            blk_fin    = b["fin_h"]
+                            traslado_h = b["traslado"] / 60.0
+
+                            if ini_h < blk_fin and fin_h > blk_ini:
+                                razon = (
+                                    f"el **{dia}** de {ses['inicio'].strftime('%H:%M')} a "
+                                    f"{ses['fin'].strftime('%H:%M')} se superpone con tu bloqueo "
+                                    f"{b['inicio']}–{b['fin']}"
+                                )
+                                secciones_bloqueadas.append((fmt_seccion(row["seccion"]), razon))
+                                conflicto_encontrado = True
+                                break
+                            elif ini_h >= blk_fin and ini_h < blk_fin + traslado_h:
+                                mins_falta = int((blk_fin + traslado_h - ini_h) * 60)
+                                razon = (
+                                    f"el **{dia}** a las {ses['inicio'].strftime('%H:%M')} no da tiempo: "
+                                    f"tu bloqueo termina a las {b['fin']} y necesitas {b['traslado']} min "
+                                    f"de traslado (faltan ~{mins_falta} min)"
+                                )
+                                secciones_bloqueadas.append((fmt_seccion(row["seccion"]), razon))
+                                conflicto_encontrado = True
+                                break
+                        if conflicto_encontrado:
+                            break
+
+                    if not conflicto_encontrado:
+                        secciones_libres.append(fmt_seccion(row["seccion"]))
+
+                if not secciones_bloqueadas:
+                    st.success(f"✅ **{curso}**: todas sus secciones son compatibles con tus bloqueos.")
+                elif secciones_libres:
+                    st.warning(
+                        f"⚠️ **{curso}**: algunas secciones tienen conflicto, "
+                        f"pero las secciones {', '.join(secciones_libres)} sí están disponibles. "
+                        f"El problema puede ser la combinación con otro curso."
+                    )
+                else:
+                    st.error(f"❌ **{curso}**: **ninguna sección** es compatible con tus bloqueos.")
+                    with st.expander(f"Ver detalle — {curso}"):
+                        for sec, razon in secciones_bloqueadas:
+                            st.markdown(f"- Sección **{sec}**: {razon}")
+
+            st.markdown("---")
+            st.info(
+                "💡 **Sugerencias para encontrar combinaciones:**\n"
+                "- Reduce el tiempo de traslado en algún bloqueo\n"
+                "- Elimina un bloqueo que no sea estrictamente necesario\n"
+                "- Vuelve al Paso 1 y deselecciona algún curso conflictivo"
             )
         else:
             st.success(f"✅ Se encontraron **{len(combinaciones_validas)}** combinación(es) válida(s). "
