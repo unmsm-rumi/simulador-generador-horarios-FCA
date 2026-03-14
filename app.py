@@ -1,16 +1,18 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import textwrap
 from pathlib import Path
+from itertools import product as iterproduct
 
-# Ruta al Excel: siempre relativa al directorio donde está este script
 BASE_DIR = Path(__file__).parent
 EXCEL_PATH = BASE_DIR / "cursos_simulador.xlsx"
 
 st.set_page_config(layout="wide")
 
-# Color del sidebar igual al fondo del logo
+# ------------------------------------------------
+# ESTILOS GLOBALES
+# ------------------------------------------------
+
 st.markdown("""
 <style>
 [data-testid="stSidebar"] {
@@ -29,10 +31,50 @@ st.markdown("""
     border-color: rgba(255,255,255,0.4) !important;
     color: white !important;
 }
+
+/* Botón modo generador */
+.modo-btn {
+    display: inline-block;
+    background: linear-gradient(135deg, #c85c72, #a33a52);
+    color: white !important;
+    border-radius: 8px;
+    padding: 0.4rem 1rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+/* Tarjetas de opciones generadas */
+.opcion-card {
+    border: 2px solid #c85c72;
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1rem;
+    background: rgba(200, 92, 114, 0.05);
+}
+.opcion-card.principal {
+    border-color: #c85c72;
+    background: rgba(200, 92, 114, 0.1);
+}
+.opcion-card h4 {
+    color: #c85c72;
+    margin-bottom: 0.5rem;
+}
+
+/* Bloqueo card */
+.bloqueo-row {
+    background: rgba(200,92,114,0.07);
+    border-left: 4px solid #c85c72;
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    margin-bottom: 0.6rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# Logo Rumi en la esquina superior izquierda del sidebar
+# ------------------------------------------------
+# LOGO
+# ------------------------------------------------
 LOGO_PATH = BASE_DIR / "logo.png"
 if LOGO_PATH.exists():
     import base64
@@ -45,486 +87,587 @@ if LOGO_PATH.exists():
         unsafe_allow_html=True
     )
 
-st.title("Simulador de Horarios Universitarios")
-
 # ------------------------------------------------
-# PALETA DE COLORES
+# MODO: SIMULADOR / GENERADOR
 # ------------------------------------------------
+if "modo" not in st.session_state:
+    st.session_state.modo = "simulador"
 
-palette = ["#c85c72", "#c85c72", "#c85c72", "#c85c72", "#c85c72"]
+modo_label = "⚡ Cambiar a Generador" if st.session_state.modo == "simulador" else "🗓️ Cambiar a Simulador"
+if st.sidebar.button(modo_label):
+    nuevo_modo = "generador" if st.session_state.modo == "simulador" else "simulador"
+    st.session_state.modo = nuevo_modo
+    # Limpiar estado previo del otro modo
+    for k in list(st.session_state.keys()):
+        if k not in ["modo"]:
+            del st.session_state[k]
+    st.rerun()
+
+modo_actual = st.session_state.modo
+
+if st.sidebar.button("Reiniciar"):
+    modo_guardado = st.session_state.modo
+    st.cache_data.clear()
+    st.session_state.clear()
+    st.session_state.modo = modo_guardado
+    st.rerun()
+
+palette = ["#c85c72"] * 10
 
 # ------------------------------------------------
 # CARGAR DATA
 # ------------------------------------------------
 
 def normalizar_texto(serie):
-    """Normaliza texto: strip, uppercase, quita tildes."""
     return (
-        serie.astype(str)
-        .str.strip()
-        .str.upper()
-        .str.replace("Á", "A", regex=False)
-        .str.replace("É", "E", regex=False)
-        .str.replace("Í", "I", regex=False)
-        .str.replace("Ó", "O", regex=False)
-        .str.replace("Ú", "U", regex=False)
-        .str.replace("á", "a", regex=False)
-        .str.replace("é", "e", regex=False)
-        .str.replace("í", "i", regex=False)
-        .str.replace("ó", "o", regex=False)
-        .str.replace("ú", "u", regex=False)
+        serie.astype(str).str.strip().str.upper()
+        .str.replace("Á","A",regex=False).str.replace("É","E",regex=False)
+        .str.replace("Í","I",regex=False).str.replace("Ó","O",regex=False)
+        .str.replace("Ú","U",regex=False)
+        .str.replace("á","a",regex=False).str.replace("é","e",regex=False)
+        .str.replace("í","i",regex=False).str.replace("ó","o",regex=False)
+        .str.replace("ú","u",regex=False)
     )
-
-
-@st.cache_data(ttl=0)
-def cargar_data(file_mtime):
-    """file_mtime se pasa para invalidar cache cuando el Excel cambie."""
-    if not EXCEL_PATH.exists():
-        ruta = str(EXCEL_PATH)
-        st.error(
-            "No se encontro el archivo Excel. "
-            "Ruta buscada: " + ruta + ". "
-            "Asegurate de que cursos_simulador.xlsx este en la misma carpeta que app.py en tu repositorio de GitHub."
-        )
-        st.stop()
-    df = pd.read_excel(EXCEL_PATH)
-
-    # Normalizar nombres de columnas
-    df.columns = (
-        df.columns
-        .str.strip()
-        .str.lower()
-        .str.replace("á", "a", regex=False)
-        .str.replace("é", "e", regex=False)
-        .str.replace("í", "i", regex=False)
-        .str.replace("ó", "o", regex=False)
-        .str.replace("ú", "u", regex=False)
-    )
-
-    # Normalizar columnas clave: strip + uppercase + sin tildes
-    for col in ["carrera", "ciclo", "sede", "plan de estudios"]:
-        if col in df.columns:
-            df[col] = normalizar_texto(df[col])
-
-    # Plan de estudios: eliminar decimales si viene como número (ej: 2023.0 → 2023)
-    if "plan de estudios" in df.columns:
-        df["plan de estudios"] = df["plan de estudios"].apply(
-            lambda x: str(int(float(x))) if x not in ["NAN", "NONE", ""] and _es_numero(x) else x
-        )
-
-    return df
-
 
 def _es_numero(val):
     try:
-        float(val)
-        return True
-    except (ValueError, TypeError):
-        return False
+        float(val); return True
+    except: return False
 
+@st.cache_data(ttl=0)
+def cargar_data(file_mtime):
+    if not EXCEL_PATH.exists():
+        st.error(f"No se encontró el archivo Excel. Ruta: {EXCEL_PATH}")
+        st.stop()
+    df = pd.read_excel(EXCEL_PATH)
+    df.columns = (
+        df.columns.str.strip().str.lower()
+        .str.replace("á","a",regex=False).str.replace("é","e",regex=False)
+        .str.replace("í","i",regex=False).str.replace("ó","o",regex=False)
+        .str.replace("ú","u",regex=False)
+    )
+    for col in ["carrera","ciclo","sede","plan de estudios"]:
+        if col in df.columns:
+            df[col] = normalizar_texto(df[col])
+    if "plan de estudios" in df.columns:
+        df["plan de estudios"] = df["plan de estudios"].apply(
+            lambda x: str(int(float(x))) if x not in ["NAN","NONE",""] and _es_numero(x) else x
+        )
+    return df
 
 import os
 file_mtime = os.path.getmtime(EXCEL_PATH) if EXCEL_PATH.exists() else 0
 df = cargar_data(file_mtime)
 
 COL_DIA2 = "dia 2 (partido)"
-
-for col in ["carrera", "ciclo", "sede", "plan de estudios"]:
+for col in ["carrera","ciclo","sede","plan de estudios"]:
     if col in df.columns:
         df[col] = df[col].astype(str)
 
-tiene_sesion2_global = all(c in df.columns for c in [COL_DIA2, "hora inicio 2", "hora fin 2"])
-
+tiene_sesion2_global = all(c in df.columns for c in [COL_DIA2,"hora inicio 2","hora fin 2"])
 if tiene_sesion2_global:
     df[COL_DIA2] = df[COL_DIA2].fillna("").astype(str).str.strip()
     df["hora inicio 2"] = df["hora inicio 2"].astype(str).fillna("")
-    df["hora fin 2"] = df["hora fin 2"].astype(str).fillna("")
+    df["hora fin 2"]    = df["hora fin 2"].astype(str).fillna("")
 
 # ------------------------------------------------
 # FUNCIONES AUXILIARES
 # ------------------------------------------------
 
 def fmt_seccion(val):
-    try:
-        return str(int(float(val)))
-    except:
-        return str(val) if pd.notna(val) else "Sin sección"
-
+    try: return str(int(float(val)))
+    except: return str(val) if pd.notna(val) else "Sin sección"
 
 def parsear_hora(val):
-    """Parsea un valor de hora en cualquier formato (string HH:MM, HH:MM:SS, datetime.time, etc.)"""
     import datetime
-    if val is None or (isinstance(val, float) and pd.isna(val)):
-        return pd.NaT
-    if isinstance(val, datetime.time):
+    if val is None or (isinstance(val,float) and pd.isna(val)): return pd.NaT
+    if isinstance(val,datetime.time):
         return pd.Timestamp(f"2000-01-01 {val.hour:02d}:{val.minute:02d}")
     s = str(val).strip()
-    if not s or s in ["nan", "None", ""]:
-        return pd.NaT
+    if not s or s in ["nan","None",""]: return pd.NaT
     parts = s.split(":")
     if len(parts) >= 2:
-        try:
-            return pd.Timestamp(f"2000-01-01 {int(parts[0]):02d}:{int(parts[1]):02d}")
-        except:
-            pass
+        try: return pd.Timestamp(f"2000-01-01 {int(parts[0]):02d}:{int(parts[1]):02d}")
+        except: pass
     return pd.to_datetime(val, errors="coerce")
-
 
 def obtener_sesiones(row):
     sesiones = []
-
-    dia1 = str(row.get("dia 1", "")).strip()
-    if dia1 not in ["", "nan", "None"]:
-        inicio = parsear_hora(row["hora inicio 1"])
-        fin    = parsear_hora(row["hora fin 1"])
-        if pd.notna(inicio) and pd.notna(fin):
-            sesiones.append({"curso": row["nombre del curso"], "dia": dia1, "inicio": inicio, "fin": fin})
-
+    dia1 = str(row.get("dia 1","")).strip()
+    if dia1 not in ["","nan","None"]:
+        ini = parsear_hora(row["hora inicio 1"])
+        fin = parsear_hora(row["hora fin 1"])
+        if pd.notna(ini) and pd.notna(fin):
+            sesiones.append({"curso":row["nombre del curso"],"dia":dia1,"inicio":ini,"fin":fin})
     if tiene_sesion2_global:
-        dia2 = str(row.get(COL_DIA2, "")).strip()
-        if dia2 not in ["", "nan", "None"]:
-            inicio = parsear_hora(row["hora inicio 2"])
-            fin    = parsear_hora(row["hora fin 2"])
-            if pd.notna(inicio) and pd.notna(fin):
-                sesiones.append({"curso": row["nombre del curso"], "dia": dia2, "inicio": inicio, "fin": fin})
-
+        dia2 = str(row.get(COL_DIA2,"")).strip()
+        if dia2 not in ["","nan","None"]:
+            ini2 = parsear_hora(row["hora inicio 2"])
+            fin2 = parsear_hora(row["hora fin 2"])
+            if pd.notna(ini2) and pd.notna(fin2):
+                sesiones.append({"curso":row["nombre del curso"],"dia":dia2,"inicio":ini2,"fin":fin2})
     return sesiones
-
 
 def detectar_cruces(df_horario):
     sesiones = []
     for _, row in df_horario.iterrows():
         sesiones.extend(obtener_sesiones(row))
-
     conflictos = []
     for i in range(len(sesiones)):
-        for j in range(i + 1, len(sesiones)):
-            s1, s2 = sesiones[i], sesiones[j]
-            if s1["curso"] == s2["curso"]:
-                continue
-            if s1["dia"] == s2["dia"]:
-                if s1["inicio"] < s2["fin"] and s2["inicio"] < s1["fin"]:
-                    conflicto = f"{s1['curso']} se cruza con {s2['curso']} el {s1['dia']}"
-                    if conflicto not in conflictos:
-                        conflictos.append(conflicto)
+        for j in range(i+1,len(sesiones)):
+            s1,s2 = sesiones[i],sesiones[j]
+            if s1["curso"]==s2["curso"]: continue
+            if s1["dia"]==s2["dia"] and s1["inicio"]<s2["fin"] and s2["inicio"]<s1["fin"]:
+                c = f"{s1['curso']} se cruza con {s2['curso']} el {s1['dia']}"
+                if c not in conflictos: conflictos.append(c)
     return conflictos
 
-
 def construir_opcion(row):
-    docente = str(row.get("docente", "")).strip()
-    if not docente or docente in ["nan", "None", ""]:
-        docente = "Sin docente"
-
-    seccion = fmt_seccion(row.get("seccion", ""))
-    sede    = str(row.get("sede", "")).strip()
-
-    dia1 = str(row.get("dia 1", "")).strip()
+    docente = str(row.get("docente","")).strip()
+    if not docente or docente in ["nan","None",""]: docente = "Sin docente"
+    seccion = fmt_seccion(row.get("seccion",""))
+    sede    = str(row.get("sede","")).strip()
+    dia1 = str(row.get("dia 1","")).strip()
     ses1 = None
-    if dia1 not in ["", "nan", "None"]:
-        ini = parsear_hora(row.get("hora inicio 1", ""))
-        fin = parsear_hora(row.get("hora fin 1", ""))
+    if dia1 not in ["","nan","None"]:
+        ini = parsear_hora(row.get("hora inicio 1",""))
+        fin = parsear_hora(row.get("hora fin 1",""))
         if pd.notna(ini) and pd.notna(fin):
             ses1 = f"{dia1} {ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
-
     ses2 = None
     if tiene_sesion2_global:
-        dia2 = str(row.get(COL_DIA2, "")).strip()
-        if dia2 not in ["", "nan", "None"]:
-            ini2 = parsear_hora(row.get("hora inicio 2", ""))
-            fin2 = parsear_hora(row.get("hora fin 2", ""))
+        dia2 = str(row.get(COL_DIA2,"")).strip()
+        if dia2 not in ["","nan","None"]:
+            ini2 = parsear_hora(row.get("hora inicio 2",""))
+            fin2 = parsear_hora(row.get("hora fin 2",""))
             if pd.notna(ini2) and pd.notna(fin2):
                 ses2 = f"{dia2} {ini2.strftime('%H:%M')}-{fin2.strftime('%H:%M')}"
-
-    if ses1 and ses2:
-        horario_txt = f"{ses1}  /  {ses2}"
-    elif ses1:
-        horario_txt = ses1
-    elif ses2:
-        horario_txt = ses2
-    else:
-        horario_txt = "Sin horario asignado"
-
+    if ses1 and ses2: horario_txt = f"{ses1}  /  {ses2}"
+    elif ses1:        horario_txt = ses1
+    elif ses2:        horario_txt = ses2
+    else:             horario_txt = "Sin horario asignado"
     return f"[{sede}] Sec.{seccion} - {docente} | {horario_txt}"
 
+def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
+    """Dibuja el gráfico Plotly del horario. Si hay bloqueos, los pinta en gris."""
+    dias     = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"]
+    dias_con = ["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"]
+    dia_x    = {d:i for i,d in enumerate(dias_con)}
+    dia_x.update({d:i for i,d in enumerate(dias)})
+    ancho_col = 0.42
 
-# ------------------------------------------------
-# BOTON REINICIAR
-# ------------------------------------------------
+    fig       = go.Figure()
+    color_map = {}
+    color_idx = 0
 
-if st.sidebar.button("Reiniciar simulador"):
-    st.cache_data.clear()
-    st.session_state.clear()
-    st.rerun()
+    # Pintar bloqueos de horario primero (fondo gris)
+    if bloqueos:
+        for b in bloqueos:
+            dia_b = b["dia"].upper()
+            if dia_b not in dia_x: continue
+            cx = dia_x[dia_b]
+            y0 = b["inicio_h"]
+            y1 = b["fin_h"]
+            fig.add_shape(
+                type="rect",
+                x0=cx-ancho_col, x1=cx+ancho_col,
+                y0=y0, y1=y1,
+                fillcolor="rgba(100,100,100,0.35)",
+                line=dict(color="rgba(80,80,80,0.5)", width=1),
+                layer="below",
+            )
+            cy = (y0+y1)/2
+            fig.add_annotation(
+                x=cx, y=cy,
+                text="<b>OCUPADO</b>",
+                showarrow=False,
+                font=dict(size=8, color="rgba(60,60,60,0.8)"),
+                align="center", xanchor="center", yanchor="middle",
+            )
 
-# ------------------------------------------------
-# FILTROS
-# ------------------------------------------------
+    for _, row in horario_df.iterrows():
+        sesiones = obtener_sesiones(row)
+        if not sesiones: continue
+        nombre = row["nombre del curso"]
+        if nombre not in color_map:
+            color_map[nombre] = palette[color_idx % len(palette)]
+            color_idx += 1
+        color = color_map[nombre]
+        docente = str(row.get("docente","Sin docente")).strip()
+        if not docente or docente in ["nan","None",""]: docente = "Sin docente"
 
+        for ses in sesiones:
+            ini,fin,dia = ses["inicio"],ses["fin"],ses["dia"]
+            if dia not in dia_x: continue
+            cx = dia_x[dia]
+            y0 = ini.hour + ini.minute/60
+            y1 = fin.hour + fin.minute/60
+            cy = (y0+y1)/2
+            dur_h = y1-y0
+            hora_txt = f"{ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
+            if dur_h < 0.75:
+                label,font_size = hora_txt, 8
+            elif dur_h < 1.25:
+                n = nombre[:12]+"…" if len(nombre)>12 else nombre
+                label,font_size = f"<b>{n}</b><br>{hora_txt}", 8
+            elif dur_h < 2.0:
+                n = nombre[:16]+"…" if len(nombre)>16 else nombre
+                label,font_size = f"<b>{n}</b><br>{hora_txt}", 9
+            else:
+                n = nombre[:18]+"…" if len(nombre)>18 else nombre
+                d = docente[:18]+"…" if len(docente)>18 else docente
+                label = f"<b>{n}</b><br>Sec.{fmt_seccion(row['seccion'])} | {hora_txt}<br>{d}"
+                font_size = 9
+            fig.add_shape(
+                type="rect",
+                x0=cx-ancho_col, x1=cx+ancho_col,
+                y0=y0, y1=y1,
+                fillcolor=color,
+                line=dict(color="white",width=2),
+                layer="below",
+            )
+            fig.add_annotation(
+                x=cx, y=cy, text=label, showarrow=False,
+                font=dict(size=font_size, color="white"),
+                align="center", xanchor="center", yanchor="middle",
+                bgcolor="rgba(0,0,0,0)", borderpad=1,
+            )
+
+    hora_min,hora_max = 6,23
+    n_dias = len(dias_con)
+    fig.update_layout(
+        height=720,
+        xaxis=dict(
+            tickvals=list(range(n_dias)), ticktext=dias_con,
+            range=[-0.5,n_dias-0.5], showgrid=True,
+            gridcolor="rgba(128,128,128,0.3)", side="top", fixedrange=True,
+        ),
+        yaxis=dict(
+            tickvals=list(range(hora_min,hora_max+1)),
+            ticktext=[f"{h:02d}:00" for h in range(hora_min,hora_max+1)],
+            range=[hora_max,hora_min], showgrid=True,
+            gridcolor="rgba(128,128,128,0.3)", fixedrange=True,
+        ),
+        template="none",
+        margin=dict(t=60,l=70,r=20,b=20),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    st.subheader(titulo)
+    st.plotly_chart(fig, use_container_width=True)
+
+# ================================================
+# FILTROS COMUNES (sidebar)
+# ================================================
 st.sidebar.header("Filtros")
 
-# Orden correcto de ciclos (normalizado, sin tildes, uppercase)
-ORDEN_CICLOS = ["TERCER CICLO", "QUINTO CICLO", "SEPTIMO CICLO", "NOVENO CICLO"]
+ORDEN_CICLOS = ["TERCER CICLO","QUINTO CICLO","SEPTIMO CICLO","NOVENO CICLO"]
 ciclos_disponibles = df["ciclo"].dropna().unique()
-ciclos_ordenados = [c for c in ORDEN_CICLOS if c in ciclos_disponibles] + \
-                   [c for c in sorted(ciclos_disponibles) if c not in ORDEN_CICLOS]
+ciclos_ordenados   = [c for c in ORDEN_CICLOS if c in ciclos_disponibles] + \
+                     [c for c in sorted(ciclos_disponibles) if c not in ORDEN_CICLOS]
 
 carrera = st.sidebar.selectbox("Carrera",          sorted(df["carrera"].dropna().unique()))
 ciclo   = st.sidebar.selectbox("Ciclo",            ciclos_ordenados)
 plan    = st.sidebar.selectbox("Plan de estudios", sorted(df["plan de estudios"].dropna().unique()))
 
-# Base filtrada por carrera + ciclo + plan (sin sede aún)
 filtrado_base = df[
-    (df["carrera"] == carrera) &
-    (df["ciclo"]   == ciclo)   &
-    (df["plan de estudios"] == plan)
+    (df["carrera"]==carrera) & (df["ciclo"]==ciclo) & (df["plan de estudios"]==plan)
 ]
-
-# Sedes disponibles para esta combinación
 sedes_disponibles = sorted(filtrado_base["sede"].dropna().unique())
+sede = st.sidebar.selectbox("Sede", ["Todas"]+sedes_disponibles)
 
-sede = st.sidebar.selectbox(
-    "Sede",
-    ["Todas"] + sedes_disponibles
-)
-
-# Aplicar filtro de sede
-if sede == "Todas":
-    filtrado = filtrado_base
-else:
-    filtrado = filtrado_base[filtrado_base["sede"] == sede]
+filtrado = filtrado_base if sede=="Todas" else filtrado_base[filtrado_base["sede"]==sede]
 
 if filtrado_base.empty:
     st.warning(f"No hay cursos para {carrera} — {ciclo} — Plan {plan}.")
     st.stop()
-
 if filtrado.empty:
     st.warning(f"No hay cursos en la sede **{sede}** para {carrera} — {ciclo} — Plan {plan}.")
     st.stop()
 
-# ------------------------------------------------
-# PASO 1 - SELECCIONAR CURSOS
-# ------------------------------------------------
+# ================================================
+# MODO SIMULADOR
+# ================================================
+if modo_actual == "simulador":
+    st.title("🗓️ Simulador de Horarios")
 
-st.header("Paso 1: Selecciona los cursos")
+    st.header("Paso 1: Selecciona los cursos")
+    cursos = sorted(filtrado["nombre del curso"].unique())
+    st.caption(f"Se encontraron **{len(cursos)} cursos** para {carrera} — {ciclo} — Plan {plan}.")
 
-cursos = sorted(filtrado["nombre del curso"].unique())
+    cursos_seleccionados = []
+    cols = st.columns(2)
+    for idx, curso in enumerate(cursos):
+        if cols[idx%2].checkbox(curso, key=f"chk_{curso}"):
+            cursos_seleccionados.append(curso)
 
-st.caption(f"Se encontraron **{len(cursos)} cursos** para {carrera} — {ciclo} — Plan {plan}.")
-
-cursos_seleccionados = []
-
-cols = st.columns(2)
-for idx, curso in enumerate(cursos):
-    col = cols[idx % 2]
-    if col.checkbox(curso, key=f"chk_{curso}"):
-        cursos_seleccionados.append(curso)
-
-if st.button("Continuar a horarios"):
-    if len(cursos_seleccionados) == 0:
-        st.warning("Selecciona al menos un curso.")
-    else:
-        st.session_state.cursos_elegidos = cursos_seleccionados
-
-# ------------------------------------------------
-# PASO 2 - SELECCIONAR SECCION / HORARIO
-# ------------------------------------------------
-
-if "cursos_elegidos" in st.session_state:
-
-    st.header("Paso 2: Escoge seccion y horario")
-    st.caption("Las opciones muestran las secciones disponibles para la sede seleccionada.")
-
-    cursos_elegidos = st.session_state.cursos_elegidos
-    seleccionados   = []
-
-    for curso in cursos_elegidos:
-
-        curso_df = filtrado[filtrado["nombre del curso"] == curso].copy()
-
-        curso_df["docente"] = (
-            curso_df["docente"]
-            .fillna("Sin docente")
-            .astype(str)
-            .str.strip()
-            .replace({"": "Sin docente", "nan": "Sin docente", "None": "Sin docente"})
-        )
-        curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
-        curso_df["opcion"]  = curso_df.apply(construir_opcion, axis=1)
-        curso_df = curso_df.sort_values("seccion")
-
-        opciones = curso_df["opcion"].tolist()
-
-        todas_sin_horario = all("Sin horario asignado" in op for op in opciones)
-        if todas_sin_horario:
-            st.warning(f"**{curso}**: ninguna seccion tiene horario asignado aun.")
-
-        NO_LLEVAR = "— No llevar este curso —"
-        opciones_con_skip = [NO_LLEVAR] + opciones
-
-        seleccion = st.selectbox(f"**{curso}**", opciones_con_skip, key=f"sel_{curso}")
-
-        if seleccion == NO_LLEVAR:
-            continue
-
-        fila = curso_df[curso_df["opcion"] == seleccion].iloc[0]
-        seleccionados.append(fila)
-
-    horario = pd.DataFrame(seleccionados)
-
-    # ------------------------------------------------
-    # GENERAR HORARIO
-    # ------------------------------------------------
-
-    if st.button("Generar horario"):
-
-        if horario.empty:
-            st.warning("No has seleccionado ningún curso. Elige al menos uno para generar el horario.")
-            st.stop()
-
-        conflictos = detectar_cruces(horario)
-
-        if conflictos:
-            st.error("Hay cruces de horario:")
-            for c in conflictos:
-                st.write(f"- {c}")
+    if st.button("Continuar a horarios"):
+        if not cursos_seleccionados:
+            st.warning("Selecciona al menos un curso.")
         else:
-            st.success("Horario generado correctamente.")
+            st.session_state.cursos_elegidos = cursos_seleccionados
 
-            dias = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"]
-            dias_con_tilde = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"]
+    if "cursos_elegidos" in st.session_state:
+        st.header("Paso 2: Escoge sección y horario")
+        st.caption("Las opciones muestran las secciones disponibles para la sede seleccionada.")
+        seleccionados = []
 
-            fig       = go.Figure()
-            color_map = {}
-            color_idx = 0
+        for curso in st.session_state.cursos_elegidos:
+            curso_df = filtrado[filtrado["nombre del curso"]==curso].copy()
+            curso_df["docente"] = (
+                curso_df["docente"].fillna("Sin docente").astype(str).str.strip()
+                .replace({"":"Sin docente","nan":"Sin docente","None":"Sin docente"})
+            )
+            curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
+            curso_df["opcion"]  = curso_df.apply(construir_opcion, axis=1)
+            curso_df = curso_df.sort_values("seccion")
+            opciones = curso_df["opcion"].tolist()
+            if all("Sin horario asignado" in op for op in opciones):
+                st.warning(f"**{curso}**: ninguna sección tiene horario asignado aún.")
+            NO_LLEVAR = "— No llevar este curso —"
+            seleccion = st.selectbox(f"**{curso}**", [NO_LLEVAR]+opciones, key=f"sel_{curso}")
+            if seleccion==NO_LLEVAR: continue
+            fila = curso_df[curso_df["opcion"]==seleccion].iloc[0]
+            seleccionados.append(fila)
 
-            dia_x    = {d: i for i, d in enumerate(dias_con_tilde)}
-            dia_x_nt = {d: i for i, d in enumerate(dias)}
-            dia_x.update(dia_x_nt)
+        horario = pd.DataFrame(seleccionados)
 
-            ancho_col = 0.42  # ligeramente más angosto para que respire
-
-            for _, row in horario.iterrows():
-                sesiones = obtener_sesiones(row)
-                if not sesiones:
-                    continue
-
-                nombre = row["nombre del curso"]
-                if nombre not in color_map:
-                    color_map[nombre] = palette[color_idx % len(palette)]
-                    color_idx += 1
-
-                color      = color_map[nombre]
-                text_color = "white"
-
-                docente = str(row.get("docente", "Sin docente")).strip()
-                if not docente or docente in ["nan", "None", ""]:
-                    docente = "Sin docente"
-
-                for ses in sesiones:
-                    ini = ses["inicio"]
-                    fin = ses["fin"]
-                    dia = ses["dia"]
-                    if dia not in dia_x:
-                        continue
-
-                    cx    = dia_x[dia]
-                    y0    = ini.hour + ini.minute / 60
-                    y1    = fin.hour + fin.minute / 60
-                    cy    = (y0 + y1) / 2
-                    dur_h = y1 - y0
-
-                    hora_txt = f"{ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
-
-                    # Adaptar contenido y tamaño de fuente según duración del bloque
-                    if dur_h < 0.75:
-                        # Bloque muy pequeño: solo hora
-                        label     = hora_txt
-                        font_size = 8
-                    elif dur_h < 1.25:
-                        # Bloque pequeño: nombre muy corto + hora
-                        n = nombre[:12] + "…" if len(nombre) > 12 else nombre
-                        label     = f"<b>{n}</b><br>{hora_txt}"
-                        font_size = 8
-                    elif dur_h < 2.0:
-                        # Bloque medio: nombre + hora
-                        n = nombre[:16] + "…" if len(nombre) > 16 else nombre
-                        label     = f"<b>{n}</b><br>{hora_txt}"
-                        font_size = 9
-                    else:
-                        # Bloque grande: nombre + sección + hora + docente
-                        n = nombre[:18] + "…" if len(nombre) > 18 else nombre
-                        d = docente[:18] + "…" if len(docente) > 18 else docente
-                        label = (
-                            f"<b>{n}</b><br>"
-                            f"Sec.{fmt_seccion(row['seccion'])} | {hora_txt}<br>"
-                            f"{d}"
-                        )
-                        font_size = 9
-
-                    # Rectángulo de color
-                    fig.add_shape(
-                        type="rect",
-                        x0=cx - ancho_col, x1=cx + ancho_col,
-                        y0=y0, y1=y1,
-                        fillcolor=color,
-                        line=dict(color="white", width=2),
-                        layer="below",
-                    )
-
-                    # Texto centrado y acotado al bloque
-                    fig.add_annotation(
-                        x=cx,
-                        y=cy,
-                        text=label,
-                        showarrow=False,
-                        font=dict(size=font_size, color=text_color),
-                        align="center",
-                        xanchor="center",
-                        yanchor="middle",
-                        bgcolor="rgba(0,0,0,0)",
-                        borderpad=1,
-                    )
-
-            if not color_map:
-                st.warning("Ninguno de los cursos seleccionados tiene horario asignado.")
+        if st.button("Generar horario"):
+            if horario.empty:
+                st.warning("No has seleccionado ningún curso.")
+                st.stop()
+            conflictos = detectar_cruces(horario)
+            if conflictos:
+                st.error("Hay cruces de horario:")
+                for c in conflictos: st.write(f"- {c}")
             else:
-                hora_min = 6
-                hora_max = 23
-                tickvals_y = [h for h in range(hora_min, hora_max + 1)]
-                ticktext_y = [f"{h:02d}:00" for h in range(hora_min, hora_max + 1)]
+                st.success("✅ Horario generado correctamente.")
+                dibujar_horario(horario)
+                st.subheader("Resumen de cursos")
+                cols_r = ["nombre del curso","docente","seccion","sede","dia 1","hora inicio 1","hora fin 1"]
+                resumen = horario[[c for c in cols_r if c in horario.columns]].copy()
+                resumen.columns = ["Curso","Docente","Sección","Sede","Día","Inicio","Fin"][:len(resumen.columns)]
+                st.dataframe(resumen, use_container_width=True)
 
-                n_dias = len(dias_con_tilde)
-                fig.update_layout(
-                    height=750,
-                    xaxis=dict(
-                        tickvals=list(range(n_dias)),
-                        ticktext=dias_con_tilde,
-                        range=[-0.5, n_dias - 0.5],
-                        showgrid=True,
-                        gridcolor="rgba(128,128,128,0.3)",
-                        side="top",
-                        fixedrange=True,
-                    ),
-                    yaxis=dict(
-                        tickvals=tickvals_y,
-                        ticktext=ticktext_y,
-                        range=[hora_max, hora_min],
-                        showgrid=True,
-                        gridcolor="rgba(128,128,128,0.3)",
-                        fixedrange=True,
-                    ),
-                    template="none",
-                    margin=dict(t=60, l=70, r=20, b=20),
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color=None),
+# ================================================
+# MODO GENERADOR
+# ================================================
+else:
+    st.title("⚡ Generador de Horarios")
+    st.markdown(
+        "Dinos cuándo **no puedes** asistir y generaremos las mejores combinaciones "
+        "de horario para ti, respetando tus tiempos."
+    )
+
+    # ---------- PASO 1: Cursos ----------
+    st.header("Paso 1: Selecciona los cursos que quieres llevar")
+    cursos = sorted(filtrado["nombre del curso"].unique())
+    st.caption(f"Se encontraron **{len(cursos)} cursos** para {carrera} — {ciclo} — Plan {plan}.")
+
+    cursos_gen = []
+    cols2 = st.columns(2)
+    for idx, curso in enumerate(cursos):
+        if cols2[idx%2].checkbox(curso, key=f"gen_chk_{curso}"):
+            cursos_gen.append(curso)
+
+    if st.button("Continuar →", key="gen_paso1"):
+        if not cursos_gen:
+            st.warning("Selecciona al menos un curso.")
+        else:
+            st.session_state.gen_cursos = cursos_gen
+            st.session_state.gen_paso = 2
+
+    # ---------- PASO 2: Bloqueos ----------
+    if st.session_state.get("gen_paso",1) >= 2 and "gen_cursos" in st.session_state:
+
+        st.header("Paso 2: Define los horarios en que NO puedes asistir")
+        st.markdown(
+            "Para cada día ocupado, indica las horas bloqueadas y cuánto tiempo "
+            "necesitas de traslado **después** del bloqueo antes de llegar a la universidad."
+        )
+
+        DIAS_SEMANA = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
+        HORAS = [f"{h:02d}:00" for h in range(5,24)]
+        MEDIAS = [f"{h:02d}:{m:02d}" for h in range(5,24) for m in [0,30]]
+
+        if "gen_bloqueos" not in st.session_state:
+            st.session_state.gen_bloqueos = []
+
+        # Formulario para agregar bloqueo
+        with st.expander("➕ Agregar bloqueo de horario", expanded=True):
+            c1,c2,c3,c4 = st.columns([2,2,2,3])
+            dia_blk    = c1.selectbox("Día",         DIAS_SEMANA, key="blk_dia")
+            hora_ini   = c2.selectbox("Hora inicio", MEDIAS,       key="blk_ini")
+            hora_fin   = c3.selectbox("Hora fin",    MEDIAS,       key="blk_fin")
+            traslado   = c4.selectbox(
+                "Traslado después (minutos)",
+                [0,15,30,45,60,90,120],
+                index=2,
+                key="blk_traslado",
+                help="¿Cuánto tiempo necesitas para llegar a la universidad después de este bloqueo?"
+            )
+            if st.button("Agregar bloqueo"):
+                ini_h = int(hora_ini.split(":")[0]) + int(hora_ini.split(":")[1])/60
+                fin_h = int(hora_fin.split(":")[0]) + int(hora_fin.split(":")[1])/60
+                if fin_h <= ini_h:
+                    st.error("La hora de fin debe ser mayor a la de inicio.")
+                else:
+                    st.session_state.gen_bloqueos.append({
+                        "dia":       dia_blk,
+                        "inicio":    hora_ini,
+                        "fin":       hora_fin,
+                        "inicio_h":  ini_h,
+                        "fin_h":     fin_h,
+                        "traslado":  traslado,
+                    })
+                    st.success(f"Bloqueo agregado: {dia_blk} {hora_ini}-{hora_fin} (traslado: {traslado} min)")
+                    st.rerun()
+
+        # Mostrar bloqueos actuales
+        if st.session_state.gen_bloqueos:
+            st.markdown("**Bloqueos actuales:**")
+            for i, b in enumerate(st.session_state.gen_bloqueos):
+                col_b1, col_b2 = st.columns([5,1])
+                col_b1.markdown(
+                    f"<div class='bloqueo-row'>🚫 <b>{b['dia']}</b> &nbsp; "
+                    f"{b['inicio']} – {b['fin']} &nbsp;|&nbsp; "
+                    f"🚌 traslado: <b>{b['traslado']} min</b></div>",
+                    unsafe_allow_html=True
                 )
+                if col_b2.button("❌", key=f"del_blk_{i}"):
+                    st.session_state.gen_bloqueos.pop(i)
+                    st.rerun()
 
-                st.subheader("Horario semanal")
-                st.plotly_chart(fig, use_container_width=True)
+        st.markdown("---")
+        col_gen1, col_gen2 = st.columns([1,3])
+        with col_gen1:
+            if st.button("⚡ Generar combinaciones", type="primary"):
+                st.session_state.gen_paso = 3
+                st.rerun()
 
-            st.subheader("Resumen de cursos seleccionados")
-            cols_resumen = ["nombre del curso", "docente", "seccion", "sede", "dia 1", "hora inicio 1", "hora fin 1"]
-            resumen = horario[[c for c in cols_resumen if c in horario.columns]].copy()
-            resumen.columns = ["Curso", "Docente", "Seccion", "Sede", "Dia", "Inicio", "Fin"][:len(resumen.columns)]
-            st.dataframe(resumen, use_container_width=True)
+    # ---------- PASO 3: Resultados ----------
+    if st.session_state.get("gen_paso",1) >= 3:
+
+        st.header("Paso 3: Combinaciones recomendadas")
+
+        bloqueos  = st.session_state.get("gen_bloqueos",[])
+        cursos_ok = st.session_state.get("gen_cursos",[])
+
+        # Construir mapa dia→bloqueos para verificación rápida
+        bloqueos_por_dia = {}
+        for b in bloqueos:
+            dia_norm = b["dia"].upper().replace("É","E").replace("Á","A").replace("Ó","O")
+            if dia_norm not in bloqueos_por_dia:
+                bloqueos_por_dia[dia_norm] = []
+            bloqueos_por_dia[dia_norm].append(b)
+
+        def sesion_tiene_conflicto(dia, ini_h, fin_h):
+            """True si la sesión se solapa o viola el margen con algún bloqueo."""
+            dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
+            for b in bloqueos_por_dia.get(dia_norm,[]):
+                blk_ini = b["inicio_h"]
+                blk_fin = b["fin_h"]
+                traslado_h = b["traslado"] / 60.0
+                # Solapamiento directo
+                if ini_h < blk_fin and fin_h > blk_ini:
+                    return True
+                # Clase empieza antes de que termine traslado post-bloqueo
+                if ini_h >= blk_fin and ini_h < blk_fin + traslado_h:
+                    return True
+            return False
+
+        def combinacion_valida(filas):
+            """Verifica que ninguna sesión de las filas tenga conflicto con bloqueos."""
+            for row in filas:
+                sesiones = obtener_sesiones(row)
+                for ses in sesiones:
+                    ini_h = ses["inicio"].hour + ses["inicio"].minute/60
+                    fin_h = ses["fin"].hour   + ses["fin"].minute/60
+                    if sesion_tiene_conflicto(ses["dia"], ini_h, fin_h):
+                        return False
+            return True
+
+        def sin_cruces_internos(filas):
+            df_tmp = pd.DataFrame(list(filas))
+            return len(detectar_cruces(df_tmp)) == 0
+
+        def score_combinacion(filas):
+            """
+            Puntaje: penaliza horas muy tempranas y muy tardías,
+            premia distribución equilibrada. Menor es mejor.
+            """
+            score = 0
+            for row in filas:
+                for ses in obtener_sesiones(row):
+                    ini_h = ses["inicio"].hour + ses["inicio"].minute/60
+                    fin_h = ses["fin"].hour   + ses["fin"].minute/60
+                    # Penalizar clases antes de las 8 o después de las 20
+                    if ini_h < 8:  score += (8 - ini_h) * 2
+                    if fin_h > 20: score += (fin_h - 20) * 1.5
+            return score
+
+        # Obtener secciones de cada curso
+        opciones_por_curso = {}
+        for curso in cursos_ok:
+            curso_df = filtrado[filtrado["nombre del curso"]==curso].copy()
+            curso_df["docente"] = (
+                curso_df["docente"].fillna("Sin docente").astype(str).str.strip()
+                .replace({"":"Sin docente","nan":"Sin docente","None":"Sin docente"})
+            )
+            curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
+            filas = [row for _,row in curso_df.iterrows()]
+            opciones_por_curso[curso] = filas
+
+        # Generar todas las combinaciones (máximo razonable)
+        MAX_COMBIS = 500
+        lista_opciones = [opciones_por_curso[c] for c in cursos_ok]
+
+        combinaciones_validas = []
+        count = 0
+        for combo in iterproduct(*lista_opciones):
+            count += 1
+            if count > MAX_COMBIS: break
+            filas = list(combo)
+            if combinacion_valida(filas) and sin_cruces_internos(filas):
+                s = score_combinacion(filas)
+                combinaciones_validas.append((s, filas))
+
+        combinaciones_validas.sort(key=lambda x: x[0])
+
+        MAX_MOSTRAR = 4   # 1 principal + 3 alternativas
+
+        if not combinaciones_validas:
+            st.error(
+                "😔 No se encontraron combinaciones disponibles con los bloqueos definidos. "
+                "Intenta reducir los tiempos de traslado o eliminar algún bloqueo."
+            )
+        else:
+            st.success(f"✅ Se encontraron **{len(combinaciones_validas)}** combinación(es) válida(s). "
+                       f"Mostrando las mejores {min(len(combinaciones_validas), MAX_MOSTRAR)}.")
+
+            for i, (score, filas) in enumerate(combinaciones_validas[:MAX_MOSTRAR]):
+                etiqueta = "⭐ Opción Principal" if i == 0 else f"Alternativa {i}"
+                with st.expander(etiqueta, expanded=(i==0)):
+                    horario_df = pd.DataFrame(list(filas))
+
+                    # Resumen rápido
+                    resumen_lines = []
+                    for row in filas:
+                        secs = obtener_sesiones(row)
+                        for ses in secs:
+                            ini_str = ses["inicio"].strftime("%H:%M")
+                            fin_str = ses["fin"].strftime("%H:%M")
+                            resumen_lines.append(
+                                f"📚 **{row['nombre del curso']}** — "
+                                f"{ses['dia']} {ini_str}-{fin_str} | "
+                                f"Sec. {fmt_seccion(row['seccion'])}"
+                            )
+                    for line in resumen_lines:
+                        st.markdown(line)
+
+                    st.markdown("---")
+                    dibujar_horario(horario_df, bloqueos=bloqueos, titulo=f"Horario — {etiqueta}")
+
+        if st.button("🔄 Volver a ajustar bloqueos"):
+            st.session_state.gen_paso = 2
+            st.rerun()
