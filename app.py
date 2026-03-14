@@ -7,7 +7,7 @@ from itertools import product as iterproduct
 BASE_DIR = Path(__file__).parent
 EXCEL_PATH = BASE_DIR / "cursos_simulador.xlsx"
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Simulador & Generador de Horarios FCA", layout="wide")
 
 # ------------------------------------------------
 # ESTILOS GLOBALES
