@@ -69,6 +69,41 @@ st.markdown("""
     padding: 0.6rem 1rem;
     margin-bottom: 0.6rem;
 }
+
+/* Secciones disponibles pill */
+.secciones-ok {
+    display: inline-block;
+    background: rgba(40,167,69,0.12);
+    border: 1px solid rgba(40,167,69,0.4);
+    color: #1a6e2e;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-left: 8px;
+}
+.secciones-warn {
+    display: inline-block;
+    background: rgba(255,193,7,0.15);
+    border: 1px solid rgba(255,193,7,0.5);
+    color: #856404;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-left: 8px;
+}
+.secciones-error {
+    display: inline-block;
+    background: rgba(220,53,69,0.12);
+    border: 1px solid rgba(220,53,69,0.4);
+    color: #842029;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-left: 8px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -97,7 +132,6 @@ modo_label = "⚡ Cambiar a Generador" if st.session_state.modo == "simulador" e
 if st.sidebar.button(modo_label):
     nuevo_modo = "generador" if st.session_state.modo == "simulador" else "simulador"
     st.session_state.modo = nuevo_modo
-    # Limpiar estado previo del otro modo
     for k in list(st.session_state.keys()):
         if k not in ["modo"]:
             del st.session_state[k]
@@ -249,7 +283,6 @@ def construir_opcion(row):
     return f"[{sede}] Sec.{seccion} - {docente} | {horario_txt}"
 
 def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
-    """Dibuja el gráfico Plotly del horario. Si hay bloqueos, los pinta en gris."""
     dias     = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"]
     dias_con = ["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"]
     dia_x    = {d:i for i,d in enumerate(dias_con)}
@@ -260,7 +293,6 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
     color_map = {}
     color_idx = 0
 
-    # Pintar bloqueos de horario primero (fondo gris)
     if bloqueos:
         for b in bloqueos:
             dia_b = b["dia"].upper().replace("É","E").replace("Á","A").replace("Ó","O")
@@ -271,7 +303,6 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
             t_antes_h   = b.get("traslado_antes",  b.get("traslado", 0)) / 60.0
             t_despues_h = b.get("traslado_despues", b.get("traslado", 0)) / 60.0
 
-            # Zona de traslado antes (más tenue)
             if t_antes_h > 0:
                 fig.add_shape(
                     type="rect",
@@ -289,7 +320,6 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
                     align="center", xanchor="center", yanchor="middle",
                 )
 
-            # Bloque principal OCUPADO
             fig.add_shape(
                 type="rect",
                 x0=cx-ancho_col, x1=cx+ancho_col,
@@ -307,7 +337,6 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
                 align="center", xanchor="center", yanchor="middle",
             )
 
-            # Zona de traslado después (más tenue)
             if t_despues_h > 0:
                 fig.add_shape(
                     type="rect",
@@ -529,12 +558,11 @@ else:
 
         DIAS_SEMANA = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
         MEDIAS = [f"{h:02d}:{m:02d}" for h in range(5,24) for m in [0,30]]
-        TRASLADOS = list(range(15, 181, 15))  # 15, 30, 45, ... 180
+        TRASLADOS = list(range(15, 181, 15))
 
         if "gen_bloqueos" not in st.session_state:
             st.session_state.gen_bloqueos = []
 
-        # Formulario para agregar bloqueo
         with st.expander("➕ Agregar bloqueo de horario", expanded=True):
             c1,c2,c3 = st.columns([2,2,2])
             dia_blk  = c1.selectbox("Día",         DIAS_SEMANA, key="blk_dia")
@@ -548,16 +576,14 @@ else:
                 [0] + TRASLADOS,
                 index=0,
                 key="blk_traslado_antes",
-                help="¿Cuánto tiempo necesitas para llegar desde la universidad a tu actividad ANTES de que empiece? "
-                     "Ejemplo: si trabajas a las 14:00 y tardas 1h, el sistema bloqueará clases que terminen después de las 13:00."
+                help="¿Cuánto tiempo necesitas para llegar desde la universidad a tu actividad ANTES de que empiece?"
             )
             traslado_despues = ct2.selectbox(
                 "Después del bloqueo (min)",
                 [0] + TRASLADOS,
                 index=2,
                 key="blk_traslado_despues",
-                help="¿Cuánto tiempo necesitas para llegar desde tu actividad de vuelta a la universidad DESPUÉS de que termine? "
-                     "Ejemplo: si tu trabajo termina a las 18:00 y tardas 1.5h, el sistema bloqueará clases que empiecen antes de las 19:30."
+                help="¿Cuánto tiempo necesitas para llegar desde tu actividad de vuelta a la universidad DESPUÉS de que termine?"
             )
             st.caption(
                 "💡 **Antes**: tiempo univ → tu actividad &nbsp;|&nbsp; "
@@ -570,7 +596,7 @@ else:
                     st.error("⚠️ La hora de fin debe ser mayor a la de inicio.")
                 else:
                     resumen_traslado = []
-                    if traslado_antes > 0:  resumen_traslado.append(f"antes: {traslado_antes} min")
+                    if traslado_antes > 0:   resumen_traslado.append(f"antes: {traslado_antes} min")
                     if traslado_despues > 0: resumen_traslado.append(f"después: {traslado_despues} min")
                     traslado_txt = " | ".join(resumen_traslado) if resumen_traslado else "sin traslado"
                     st.session_state.gen_bloqueos.append({
@@ -585,12 +611,10 @@ else:
                     st.success(f"✅ Agregado: {dia_blk} {hora_ini}–{hora_fin} | {traslado_txt}")
                     st.rerun()
 
-        # Mostrar bloqueos actuales agrupados por día
         if st.session_state.gen_bloqueos:
             st.markdown(f"**Bloqueos actuales ({len(st.session_state.gen_bloqueos)} en total):**")
             st.caption("Puedes seguir agregando más bloqueos arriba o eliminar alguno con ❌")
 
-            # Agrupar por día para mostrar más ordenado
             dias_con_bloqueo = []
             for b in st.session_state.gen_bloqueos:
                 if b["dia"] not in dias_con_bloqueo:
@@ -644,51 +668,46 @@ else:
             """True si la sesión se solapa o viola los márgenes de traslado con algún bloqueo."""
             dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
             for b in bloqueos_por_dia.get(dia_norm,[]):
-                blk_ini        = b["inicio_h"]
-                blk_fin        = b["fin_h"]
-                t_antes_h      = b.get("traslado_antes",  b.get("traslado", 0)) / 60.0
-                t_despues_h    = b.get("traslado_despues", b.get("traslado", 0)) / 60.0
-
-                # Zona bloqueada efectiva = (blk_ini - t_antes) hasta (blk_fin + t_despues)
+                blk_ini     = b["inicio_h"]
+                blk_fin     = b["fin_h"]
+                t_antes_h   = b.get("traslado_antes",  b.get("traslado", 0)) / 60.0
+                t_despues_h = b.get("traslado_despues", b.get("traslado", 0)) / 60.0
                 zona_ini = blk_ini - t_antes_h
                 zona_fin = blk_fin + t_despues_h
-
-                # Solapamiento con zona bloqueada ampliada
                 if ini_h < zona_fin and fin_h > zona_ini:
                     return True
             return False
 
-        def combinacion_valida(filas):
-            """Verifica que ninguna sesión de las filas tenga conflicto con bloqueos."""
-            for row in filas:
-                sesiones = obtener_sesiones(row)
-                for ses in sesiones:
-                    ini_h = ses["inicio"].hour + ses["inicio"].minute/60
-                    fin_h = ses["fin"].hour   + ses["fin"].minute/60
-                    if sesion_tiene_conflicto(ses["dia"], ini_h, fin_h):
-                        return False
+        def fila_es_libre(row):
+            """True si NINGUNA sesión de la fila tiene conflicto con bloqueos."""
+            for ses in obtener_sesiones(row):
+                ini_h = ses["inicio"].hour + ses["inicio"].minute/60
+                fin_h = ses["fin"].hour   + ses["fin"].minute/60
+                if sesion_tiene_conflicto(ses["dia"], ini_h, fin_h):
+                    return False
             return True
+
+        def combinacion_valida(filas):
+            return all(fila_es_libre(row) for row in filas)
 
         def sin_cruces_internos(filas):
             df_tmp = pd.DataFrame(list(filas))
             return len(detectar_cruces(df_tmp)) == 0
 
         def score_combinacion(filas):
-            """
-            Puntaje: penaliza horas muy tempranas y muy tardías,
-            premia distribución equilibrada. Menor es mejor.
-            """
             score = 0
             for row in filas:
                 for ses in obtener_sesiones(row):
                     ini_h = ses["inicio"].hour + ses["inicio"].minute/60
                     fin_h = ses["fin"].hour   + ses["fin"].minute/60
-                    # Penalizar clases antes de las 8 o después de las 20
                     if ini_h < 8:  score += (8 - ini_h) * 2
                     if fin_h > 20: score += (fin_h - 20) * 1.5
             return score
 
-        # Obtener secciones de cada curso
+        # ── FILTRAR SECCIONES POR BLOQUEOS (sin fallback) ──────────────────────
+        # Cada curso solo conserva las secciones cuyas sesiones NO chocan con bloqueos.
+        # Si no queda ninguna sección libre, el curso queda con lista vacía → sin combinaciones.
+
         opciones_por_curso = {}
         for curso in cursos_ok:
             curso_df = filtrado[filtrado["nombre del curso"]==curso].copy()
@@ -697,255 +716,220 @@ else:
                 .replace({"":"Sin docente","nan":"Sin docente","None":"Sin docente"})
             )
             curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
-            filas = [row for _,row in curso_df.iterrows()]
-            opciones_por_curso[curso] = filas
-
-        # ── OPTIMIZACIÓN: filtrar primero por bloqueos, luego combinar ──
-        # Así evitamos explotar combinaciones con secciones ya descartadas
-        MAX_COMBIS_VALIDAS = 200  # máximo de combinaciones VÁLIDAS a guardar
+            opciones_por_curso[curso] = [row for _,row in curso_df.iterrows()]
 
         opciones_filtradas = {}
+        cursos_sin_seccion = []   # cursos que quedaron sin ninguna sección disponible
+
         for curso in cursos_ok:
-            libres = []
-            for row in opciones_por_curso[curso]:
-                sesiones = obtener_sesiones(row)
-                tiene_conflicto = False
-                for ses in sesiones:
-                    ini_h = ses["inicio"].hour + ses["inicio"].minute/60
-                    fin_h = ses["fin"].hour   + ses["fin"].minute/60
-                    if sesion_tiene_conflicto(ses["dia"], ini_h, fin_h):
-                        tiene_conflicto = True
-                        break
-                if not tiene_conflicto:
-                    libres.append(row)
-            # Si un curso no tiene ninguna sección libre, no hay combinaciones posibles
-            opciones_filtradas[curso] = libres if libres else opciones_por_curso[curso]
+            libres = [row for row in opciones_por_curso[curso] if fila_es_libre(row)]
+            if libres:
+                opciones_filtradas[curso] = libres
+            else:
+                # No hay ninguna sección compatible → marcar y dejar lista vacía
+                opciones_filtradas[curso] = []
+                cursos_sin_seccion.append(curso)
 
-        lista_opciones = [opciones_filtradas[c] for c in cursos_ok]
+        # ── MOSTRAR RESUMEN DE SECCIONES DISPONIBLES POR CURSO ─────────────────
+        st.markdown("#### 📋 Secciones compatibles con tus bloqueos")
+        total_secs_por_curso = {c: len(opciones_por_curso[c]) for c in cursos_ok}
+        libres_por_curso     = {c: len(opciones_filtradas[c]) for c in cursos_ok}
 
-        # Calcular total de combinaciones tras filtro
-        total_tras_filtro = 1
-        for opts in lista_opciones:
-            total_tras_filtro *= len(opts)
-
-        # Límite dinámico: si hay pocas combinaciones tras filtro, revisarlas todas
-        MAX_ITER = max(5000, total_tras_filtro)
-
-        combinaciones_validas = []
-        count = 0
-        for combo in iterproduct(*lista_opciones):
-            count += 1
-            if count > MAX_ITER: break
-            filas = list(combo)
-            if combinacion_valida(filas) and sin_cruces_internos(filas):
-                s = score_combinacion(filas)
-                combinaciones_validas.append((s, filas))
-                if len(combinaciones_validas) >= MAX_COMBIS_VALIDAS:
-                    break
-
-        combinaciones_validas.sort(key=lambda x: x[0])
-
-        MAX_MOSTRAR = 4   # 1 principal + 3 alternativas
-
-        # Guardar combinaciones en session_state para paginación
-        if "comb_validas" not in st.session_state or st.session_state.get("comb_hash") != len(combinaciones_validas):
-            st.session_state.comb_validas = combinaciones_validas
-            st.session_state.comb_hash    = len(combinaciones_validas)
-            st.session_state.comb_pagina  = 0
-
-        if not combinaciones_validas:
-            st.error("😔 No se encontraron combinaciones disponibles con los bloqueos definidos.")
-
-            # ─── Recopilar diagnóstico completo ───
-            # Por curso: {curso -> {sec -> [(dia, ini, fin, razon_corta)]}}
-            diag_cursos = {}
-            # Por día: {dia -> [(curso, sec, ini, fin, razon_corta)]}
-            diag_dias   = {}
-
-            def razon_conflicto(dia, ses, b):
-                ini_h = ses["inicio"].hour + ses["inicio"].minute/60
-                fin_h = ses["fin"].hour   + ses["fin"].minute/60
-                blk_ini     = b["inicio_h"]
-                blk_fin     = b["fin_h"]
-                t_antes_h   = b.get("traslado_antes",  0) / 60.0
-                t_despues_h = b.get("traslado_despues", 0) / 60.0
-                zona_ini    = blk_ini - t_antes_h
-                zona_fin    = blk_fin + t_despues_h
-                ini_str = ses["inicio"].strftime("%H:%M")
-                fin_str = ses["fin"].strftime("%H:%M")
-
-                if ini_h < blk_fin and fin_h > blk_ini:
-                    return (
-                        f"clase {ini_str}–{fin_str} se superpone con bloqueo {b['inicio']}–{b['fin']}"
+        cols_preview = st.columns(min(len(cursos_ok), 3))
+        for i, curso in enumerate(cursos_ok):
+            total = total_secs_por_curso[curso]
+            libres = libres_por_curso[curso]
+            col = cols_preview[i % len(cols_preview)]
+            with col:
+                if libres == 0:
+                    badge = f"<span class='secciones-error'>0 / {total} secciones</span>"
+                    col.markdown(
+                        f"❌ **{curso}**<br>{badge}<br>"
+                        f"<small style='color:#842029'>Ninguna sección es compatible con tus bloqueos</small>",
+                        unsafe_allow_html=True
                     )
-                elif fin_h > zona_ini and ini_h < blk_ini:
-                    salida = f"{int(zona_ini):02d}:{int((zona_ini%1)*60):02d}"
-                    return (
-                        f"clase {ini_str}–{fin_str} termina tarde: necesitas salir a las {salida} "
-                        f"para llegar al bloqueo {b['inicio']} ({b.get('traslado_antes',0)} min traslado)"
+                elif libres < total:
+                    badge = f"<span class='secciones-warn'>{libres} / {total} secciones</span>"
+                    secs_libres = [fmt_seccion(r.get("seccion","")) for r in opciones_filtradas[curso]]
+                    col.markdown(
+                        f"⚠️ **{curso}**<br>{badge}<br>"
+                        f"<small>Secciones disponibles: {', '.join(secs_libres)}</small>",
+                        unsafe_allow_html=True
                     )
                 else:
-                    zona_fin_str = f"{int(zona_fin):02d}:{int((zona_fin%1)*60):02d}"
-                    return (
-                        f"clase {ini_str}–{fin_str} empieza muy pronto: bloqueo termina {b['fin']} "
-                        f"+ {b.get('traslado_despues',0)} min traslado → libre recién a las {zona_fin_str}"
+                    badge = f"<span class='secciones-ok'>{libres} / {total} secciones</span>"
+                    col.markdown(
+                        f"✅ **{curso}**<br>{badge}",
+                        unsafe_allow_html=True
                     )
 
-            for curso in cursos_ok:
-                filas_curso = opciones_por_curso.get(curso, [])
-                diag_cursos[curso] = {"bloqueadas": [], "libres": []}
+        st.markdown("---")
 
-                for row in filas_curso:
-                    sec = fmt_seccion(row["seccion"])
-                    sesiones = obtener_sesiones(row)
-                    conflicto_encontrado = False
-                    for ses in sesiones:
-                        ini_h    = ses["inicio"].hour + ses["inicio"].minute/60
-                        fin_h    = ses["fin"].hour   + ses["fin"].minute/60
-                        dia      = ses["dia"]
-                        dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
+        # Si algún curso quedó sin secciones, no tiene sentido combinar → mostrar error directo
+        if cursos_sin_seccion:
+            st.error(
+                f"😔 Los siguientes cursos **no tienen ninguna sección compatible** con tus bloqueos: "
+                f"**{', '.join(cursos_sin_seccion)}**.\n\n"
+                "No es posible generar combinaciones. Ajusta tus bloqueos o deselecciona estos cursos."
+            )
 
-                        for b in bloqueos_por_dia.get(dia_norm, []):
-                            blk_ini     = b["inicio_h"]
-                            blk_fin     = b["fin_h"]
-                            t_antes_h   = b.get("traslado_antes",  0) / 60.0
-                            t_despues_h = b.get("traslado_despues", 0) / 60.0
-                            zona_ini    = blk_ini - t_antes_h
-                            zona_fin    = blk_fin + t_despues_h
-
-                            if ini_h < zona_fin and fin_h > zona_ini:
-                                razon = razon_conflicto(dia, ses, b)
-                                diag_cursos[curso]["bloqueadas"].append((sec, dia, ses["inicio"].strftime("%H:%M"), ses["fin"].strftime("%H:%M"), razon))
-                                # Registrar también por día
-                                if dia not in diag_dias:
-                                    diag_dias[dia] = []
-                                diag_dias[dia].append((curso, sec, ses["inicio"].strftime("%H:%M"), ses["fin"].strftime("%H:%M"), razon))
-                                conflicto_encontrado = True
-                                break
-                        if conflicto_encontrado:
-                            break
-
-                    if not conflicto_encontrado:
-                        diag_cursos[curso]["libres"].append(sec)
-
-            # ─── VISTA 1: Por curso ───
-            st.markdown("### 📚 Diagnóstico por curso")
-            for curso in cursos_ok:
-                info  = diag_cursos[curso]
-                libres     = info["libres"]
-                bloqueadas = info["bloqueadas"]
-
-                if not bloqueadas:
-                    st.success(f"✅ **{curso}** — todas sus secciones son compatibles.")
-                elif libres:
-                    with st.expander(f"⚠️ {curso} — secciones {', '.join(libres)} disponibles, otras con conflicto"):
-                        st.markdown(f"Las secciones **{', '.join(libres)}** no tienen conflicto con tus bloqueos, "
-                                    f"pero no combinan bien con otro curso seleccionado.")
-                        st.markdown("**Secciones con conflicto:**")
-                        for sec, dia, ini, fin, razon in bloqueadas:
-                            st.markdown(f"- Sec. **{sec}** — {razon}")
-                else:
-                    with st.expander(f"❌ {curso} — ninguna sección disponible"):
-                        st.markdown("**Todas las secciones tienen conflicto:**")
-                        for sec, dia, ini, fin, razon in bloqueadas:
-                            st.markdown(f"- Sec. **{sec}** — {razon}")
-
-            # ─── VISTA 2: Por día ───
-            if diag_dias:
-                st.markdown("### 📅 Diagnóstico por día")
-                ORDEN_DIAS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
-                dias_ordenados = [d for d in ORDEN_DIAS if d in diag_dias] +                                  [d for d in diag_dias if d not in ORDEN_DIAS]
-                for dia in dias_ordenados:
-                    conflictos_dia = diag_dias[dia]
-                    cursos_afectados = list(dict.fromkeys([c[0] for c in conflictos_dia]))
-                    with st.expander(f"📅 {dia} — {len(conflictos_dia)} conflicto(s) en {len(cursos_afectados)} curso(s)"):
-                        # Mostrar los bloqueos de ese día
-                        dia_norm = dia.upper().replace("É","E").replace("Á","A").replace("Ó","O")
-                        blqs = bloqueos_por_dia.get(dia_norm, [])
-                        if blqs:
-                            st.markdown("**Tus bloqueos ese día:**")
-                            for b in blqs:
-                                partes = []
-                                if b.get("traslado_antes",  0) > 0: partes.append(f"traslado antes: {b['traslado_antes']} min")
-                                if b.get("traslado_despues",0) > 0: partes.append(f"traslado después: {b['traslado_despues']} min")
-                                extras = f" ({', '.join(partes)})" if partes else ""
-                                st.markdown(f"- 🚫 {b['inicio']}–{b['fin']}{extras}")
-                        st.markdown("**Secciones que no pueden ir ese día:**")
-                        for curso, sec, ini, fin, razon in conflictos_dia:
-                            st.markdown(f"- **{curso}** Sec.{sec} ({ini}–{fin}): {razon}")
+            # Diagnóstico detallado de los cursos bloqueados
+            st.markdown("### 📚 ¿Por qué no hay secciones disponibles?")
+            for curso in cursos_sin_seccion:
+                with st.expander(f"❌ {curso} — detalle de conflictos"):
+                    for row in opciones_por_curso[curso]:
+                        sec = fmt_seccion(row.get("seccion",""))
+                        sesiones = obtener_sesiones(row)
+                        conflictos_sec = []
+                        for ses in sesiones:
+                            ini_h    = ses["inicio"].hour + ses["inicio"].minute/60
+                            fin_h    = ses["fin"].hour   + ses["fin"].minute/60
+                            dia_norm = ses["dia"].upper().replace("É","E").replace("Á","A").replace("Ó","O")
+                            for b in bloqueos_por_dia.get(dia_norm, []):
+                                t_antes_h   = b.get("traslado_antes",  0) / 60.0
+                                t_despues_h = b.get("traslado_despues", 0) / 60.0
+                                zona_ini    = b["inicio_h"] - t_antes_h
+                                zona_fin    = b["fin_h"]    + t_despues_h
+                                if ini_h < zona_fin and fin_h > zona_ini:
+                                    ini_str = ses["inicio"].strftime("%H:%M")
+                                    fin_str = ses["fin"].strftime("%H:%M")
+                                    zona_ini_str = f"{int(zona_ini):02d}:{int((zona_ini%1)*60):02d}"
+                                    zona_fin_str = f"{int(zona_fin):02d}:{int((zona_fin%1)*60):02d}"
+                                    conflictos_sec.append(
+                                        f"Sec. **{sec}** — {ses['dia']} {ini_str}–{fin_str} "
+                                        f"choca con bloqueo {b['inicio']}–{b['fin']} "
+                                        f"(zona bloqueada efectiva: {zona_ini_str}–{zona_fin_str})"
+                                    )
+                                    break
+                        for msg in conflictos_sec:
+                            st.markdown(f"- {msg}")
 
             st.markdown("---")
             st.info(
-                "💡 **Sugerencias para encontrar combinaciones:**\n"
-                "- Reduce el tiempo de traslado en el día con más conflictos\n"
+                "💡 **Sugerencias:**\n"
+                "- Reduce el tiempo de traslado en alguno de tus bloqueos\n"
                 "- Elimina un bloqueo que no sea estrictamente necesario\n"
-                "- Vuelve al Paso 1 y deselecciona algún curso conflictivo"
+                "- Vuelve al Paso 1 y deselecciona el curso problemático"
             )
+
         else:
-            pagina       = st.session_state.get("comb_pagina", 0)
-            total        = len(combinaciones_validas)
-            inicio       = pagina * MAX_MOSTRAR
-            fin_pag      = min(inicio + MAX_MOSTRAR, total)
-            pagina_combis = combinaciones_validas[inicio:fin_pag]
-            total_paginas = (total + MAX_MOSTRAR - 1) // MAX_MOSTRAR
+            # ── GENERAR COMBINACIONES con las secciones ya filtradas ─────────────
+            MAX_COMBIS_VALIDAS = 200
+            lista_opciones = [opciones_filtradas[c] for c in cursos_ok]
 
-            st.success(
-                f"✅ Se encontraron **{total}** combinación(es) válida(s). "
-                f"Mostrando **{inicio+1}–{fin_pag}** de {total} "
-                f"(página {pagina+1} de {total_paginas})."
-            )
+            total_tras_filtro = 1
+            for opts in lista_opciones:
+                total_tras_filtro *= len(opts)
 
-            for i, (score, filas) in enumerate(pagina_combis):
-                num_global = inicio + i
-                if num_global == 0:
-                    etiqueta = "⭐ Opción Principal"
-                else:
-                    etiqueta = f"Alternativa {num_global}"
-                with st.expander(etiqueta, expanded=(i==0)):
-                    horario_df = pd.DataFrame(list(filas))
+            MAX_ITER = max(5000, total_tras_filtro)
 
-                    # Resumen rápido
-                    resumen_lines = []
-                    for row in filas:
-                        secs = obtener_sesiones(row)
-                        docente_r = str(row.get("docente","")).strip()
-                        if not docente_r or docente_r in ["nan","None",""]:
-                            docente_r = "Sin docente"
-                        for ses in secs:
-                            ini_str = ses["inicio"].strftime("%H:%M")
-                            fin_str = ses["fin"].strftime("%H:%M")
-                            resumen_lines.append(
-                                f"📚 **{row['nombre del curso']}** — "
-                                f"{ses['dia']} {ini_str}-{fin_str} | "
-                                f"Sec. {fmt_seccion(row['seccion'])} | "
-                                f"👤 {docente_r}"
-                            )
-                    for line in resumen_lines:
-                        st.markdown(line)
+            combinaciones_validas = []
+            count = 0
+            for combo in iterproduct(*lista_opciones):
+                count += 1
+                if count > MAX_ITER: break
+                filas = list(combo)
+                # combinacion_valida ya es redundante porque filtramos antes,
+                # pero lo dejamos como doble chequeo de seguridad
+                if combinacion_valida(filas) and sin_cruces_internos(filas):
+                    s = score_combinacion(filas)
+                    combinaciones_validas.append((s, filas))
+                    if len(combinaciones_validas) >= MAX_COMBIS_VALIDAS:
+                        break
 
-                    st.markdown("---")
-                    dibujar_horario(horario_df, bloqueos=bloqueos, titulo=f"Horario — {etiqueta}")
+            combinaciones_validas.sort(key=lambda x: x[0])
 
-            # ── Navegación de páginas ──
-            st.markdown("---")
-            nav1, nav2, nav3 = st.columns([1, 2, 1])
-            with nav1:
-                if pagina > 0:
-                    if st.button("← Opciones anteriores"):
-                        st.session_state.comb_pagina -= 1
-                        st.rerun()
-            with nav2:
-                st.markdown(
-                    f"<div style='text-align:center; color:gray; padding-top:6px;'>"
-                    f"Página {pagina+1} de {total_paginas} &nbsp;|&nbsp; "
-                    f"{total} combinaciones en total</div>",
-                    unsafe_allow_html=True
+            MAX_MOSTRAR = 4
+
+            if "comb_validas" not in st.session_state or st.session_state.get("comb_hash") != len(combinaciones_validas):
+                st.session_state.comb_validas = combinaciones_validas
+                st.session_state.comb_hash    = len(combinaciones_validas)
+                st.session_state.comb_pagina  = 0
+
+            if not combinaciones_validas:
+                st.error(
+                    "😔 Las secciones compatibles con tus bloqueos se cruzan entre sí. "
+                    "No hay ninguna combinación sin conflictos internos."
                 )
-            with nav3:
-                if fin_pag < total:
-                    if st.button("Ver otras opciones →"):
-                        st.session_state.comb_pagina += 1
-                        st.rerun()
+
+                # Diagnóstico: mostrar qué secciones quedaron y por qué se cruzan
+                st.markdown("### 📚 Secciones disponibles (pero con cruces entre cursos)")
+                for curso in cursos_ok:
+                    filas = opciones_filtradas[curso]
+                    secs  = [fmt_seccion(r.get("seccion","")) for r in filas]
+                    ops   = [construir_opcion(r) for r in filas]
+                    with st.expander(f"📖 {curso} — {len(secs)} sección(es) libre(s)"):
+                        for op in ops:
+                            st.markdown(f"- {op}")
+
+                st.info(
+                    "💡 **Sugerencias:**\n"
+                    "- Amplía algún bloqueo (más horas libres = más secciones disponibles = más combinaciones)\n"
+                    "- Elimina un bloqueo secundario\n"
+                    "- Deselecciona algún curso para reducir conflictos entre asignaturas"
+                )
+
+            else:
+                pagina       = st.session_state.get("comb_pagina", 0)
+                total        = len(combinaciones_validas)
+                inicio       = pagina * MAX_MOSTRAR
+                fin_pag      = min(inicio + MAX_MOSTRAR, total)
+                pagina_combis = combinaciones_validas[inicio:fin_pag]
+                total_paginas = (total + MAX_MOSTRAR - 1) // MAX_MOSTRAR
+
+                st.success(
+                    f"✅ Se encontraron **{total}** combinación(es) válida(s). "
+                    f"Mostrando **{inicio+1}–{fin_pag}** de {total} "
+                    f"(página {pagina+1} de {total_paginas})."
+                )
+
+                for i, (score, filas) in enumerate(pagina_combis):
+                    num_global = inicio + i
+                    etiqueta = "⭐ Opción Principal" if num_global == 0 else f"Alternativa {num_global}"
+                    with st.expander(etiqueta, expanded=(i==0)):
+                        horario_df = pd.DataFrame(list(filas))
+
+                        resumen_lines = []
+                        for row in filas:
+                            secs = obtener_sesiones(row)
+                            docente_r = str(row.get("docente","")).strip()
+                            if not docente_r or docente_r in ["nan","None",""]:
+                                docente_r = "Sin docente"
+                            for ses in secs:
+                                ini_str = ses["inicio"].strftime("%H:%M")
+                                fin_str = ses["fin"].strftime("%H:%M")
+                                resumen_lines.append(
+                                    f"📚 **{row['nombre del curso']}** — "
+                                    f"{ses['dia']} {ini_str}-{fin_str} | "
+                                    f"Sec. {fmt_seccion(row['seccion'])} | "
+                                    f"👤 {docente_r}"
+                                )
+                        for line in resumen_lines:
+                            st.markdown(line)
+
+                        st.markdown("---")
+                        dibujar_horario(horario_df, bloqueos=bloqueos, titulo=f"Horario — {etiqueta}")
+
+                # ── Navegación de páginas ──
+                st.markdown("---")
+                nav1, nav2, nav3 = st.columns([1, 2, 1])
+                with nav1:
+                    if pagina > 0:
+                        if st.button("← Opciones anteriores"):
+                            st.session_state.comb_pagina -= 1
+                            st.rerun()
+                with nav2:
+                    st.markdown(
+                        f"<div style='text-align:center; color:gray; padding-top:6px;'>"
+                        f"Página {pagina+1} de {total_paginas} &nbsp;|&nbsp; "
+                        f"{total} combinaciones en total</div>",
+                        unsafe_allow_html=True
+                    )
+                with nav3:
+                    if fin_pag < total:
+                        if st.button("Ver otras opciones →"):
+                            st.session_state.comb_pagina += 1
+                            st.rerun()
 
         if st.button("🔄 Volver a ajustar bloqueos"):
             st.session_state.comb_pagina = 0
