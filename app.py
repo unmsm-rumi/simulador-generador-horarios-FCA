@@ -700,19 +700,48 @@ else:
             filas = [row for _,row in curso_df.iterrows()]
             opciones_por_curso[curso] = filas
 
-        # Generar todas las combinaciones (máximo razonable)
-        MAX_COMBIS = 500
-        lista_opciones = [opciones_por_curso[c] for c in cursos_ok]
+        # ── OPTIMIZACIÓN: filtrar primero por bloqueos, luego combinar ──
+        # Así evitamos explotar combinaciones con secciones ya descartadas
+        MAX_COMBIS_VALIDAS = 200  # máximo de combinaciones VÁLIDAS a guardar
+
+        opciones_filtradas = {}
+        for curso in cursos_ok:
+            libres = []
+            for row in opciones_por_curso[curso]:
+                sesiones = obtener_sesiones(row)
+                tiene_conflicto = False
+                for ses in sesiones:
+                    ini_h = ses["inicio"].hour + ses["inicio"].minute/60
+                    fin_h = ses["fin"].hour   + ses["fin"].minute/60
+                    if sesion_tiene_conflicto(ses["dia"], ini_h, fin_h):
+                        tiene_conflicto = True
+                        break
+                if not tiene_conflicto:
+                    libres.append(row)
+            # Si un curso no tiene ninguna sección libre, no hay combinaciones posibles
+            opciones_filtradas[curso] = libres if libres else opciones_por_curso[curso]
+
+        lista_opciones = [opciones_filtradas[c] for c in cursos_ok]
+
+        # Calcular total de combinaciones tras filtro
+        total_tras_filtro = 1
+        for opts in lista_opciones:
+            total_tras_filtro *= len(opts)
+
+        # Límite dinámico: si hay pocas combinaciones tras filtro, revisarlas todas
+        MAX_ITER = max(5000, total_tras_filtro)
 
         combinaciones_validas = []
         count = 0
         for combo in iterproduct(*lista_opciones):
             count += 1
-            if count > MAX_COMBIS: break
+            if count > MAX_ITER: break
             filas = list(combo)
             if combinacion_valida(filas) and sin_cruces_internos(filas):
                 s = score_combinacion(filas)
                 combinaciones_validas.append((s, filas))
+                if len(combinaciones_validas) >= MAX_COMBIS_VALIDAS:
+                    break
 
         combinaciones_validas.sort(key=lambda x: x[0])
 
