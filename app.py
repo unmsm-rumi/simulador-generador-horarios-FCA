@@ -423,7 +423,9 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
         paper_bgcolor="rgba(0,0,0,0)",
     )
     st.subheader(titulo)
-    st.plotly_chart(fig, use_container_width=True)
+    import hashlib, time
+    chart_key = hashlib.md5(f"{titulo}{time.time_ns()}".encode()).hexdigest()[:12]
+    st.plotly_chart(fig, use_container_width=True, key=f"chart_{chart_key}")
 
 # ================================================
 # FILTROS COMUNES (sidebar)
