@@ -696,20 +696,56 @@ else:
             df_tmp = pd.DataFrame(list(filas))
             return len(detectar_cruces(df_tmp)) == 0
 
+        # ── NUEVA FUNCIÓN: huella única por combinación ──────────────────────
+        def huella_combinacion(filas):
+            """
+            Genera una firma única basada en curso + sección + horario exacto de cada sesión.
+            Dos combos con exactamente los mismos cursos, secciones y sesiones producen
+            la misma huella y se tratan como duplicados.
+            """
+            partes = []
+            for row in filas:
+                curso_n = str(row.get("nombre del curso", ""))
+                sec_n   = fmt_seccion(row.get("seccion", ""))
+                sesiones_row = obtener_sesiones(row)
+                ses_txt = "|".join(
+                    sorted(
+                        f"{s['dia']}{s['inicio'].strftime('%H%M')}{s['fin'].strftime('%H%M')}"
+                        for s in sesiones_row
+                    )
+                )
+                partes.append(f"{curso_n}::{sec_n}::{ses_txt}")
+            return "||".join(sorted(partes))
+
+        # ── NUEVA FUNCIÓN: score más discriminante ───────────────────────────
         def score_combinacion(filas):
+            """
+            Score mejorado:
+            - Penaliza horas muy tempranas (antes de 8h) y muy tardías (después de 21h)
+            - Penaliza días con poca carga (visitas poco aprovechadas a la universidad)
+            - Penaliza tener muchos días distintos de clases
+            """
             score = 0
+            dias_usados = {}
             for row in filas:
                 for ses in obtener_sesiones(row):
-                    ini_h = ses["inicio"].hour + ses["inicio"].minute/60
-                    fin_h = ses["fin"].hour   + ses["fin"].minute/60
-                    if ini_h < 8:  score += (8 - ini_h) * 2
-                    if fin_h > 20: score += (fin_h - 20) * 1.5
+                    ini_h = ses["inicio"].hour + ses["inicio"].minute / 60
+                    fin_h = ses["fin"].hour   + ses["fin"].minute / 60
+                    d     = ses["dia"]
+                    if ini_h < 8:  score += (8  - ini_h) * 2
+                    if fin_h > 21: score += (fin_h - 21) * 1.5
+                    dur = fin_h - ini_h
+                    dias_usados.setdefault(d, []).append(dur)
+            # Penalizar días con muy poca carga horaria
+            for dia, durs in dias_usados.items():
+                total_horas_dia = sum(durs)
+                if total_horas_dia < 1.5:
+                    score += 2.0
+            # Penalizar tener más días distintos de clases
+            score += len(dias_usados) * 0.5
             return score
 
-        # ── FILTRAR SECCIONES POR BLOQUEOS (sin fallback) ──────────────────────
-        # Cada curso solo conserva las secciones cuyas sesiones NO chocan con bloqueos.
-        # Si no queda ninguna sección libre, el curso queda con lista vacía → sin combinaciones.
-
+        # ── FILTRAR SECCIONES POR BLOQUEOS ──────────────────────────────────
         opciones_por_curso = {}
         for curso in cursos_ok:
             curso_df = filtrado[filtrado["nombre del curso"]==curso].copy()
@@ -721,18 +757,17 @@ else:
             opciones_por_curso[curso] = [row for _,row in curso_df.iterrows()]
 
         opciones_filtradas = {}
-        cursos_sin_seccion = []   # cursos que quedaron sin ninguna sección disponible
+        cursos_sin_seccion = []
 
         for curso in cursos_ok:
             libres = [row for row in opciones_por_curso[curso] if fila_es_libre(row)]
             if libres:
                 opciones_filtradas[curso] = libres
             else:
-                # No hay ninguna sección compatible → marcar y dejar lista vacía
                 opciones_filtradas[curso] = []
                 cursos_sin_seccion.append(curso)
 
-        # ── MOSTRAR RESUMEN DE SECCIONES DISPONIBLES POR CURSO ─────────────────
+        # ── MOSTRAR RESUMEN DE SECCIONES DISPONIBLES POR CURSO ──────────────
         st.markdown("#### 📋 Secciones compatibles con tus bloqueos")
         total_secs_por_curso = {c: len(opciones_por_curso[c]) for c in cursos_ok}
         libres_por_curso     = {c: len(opciones_filtradas[c]) for c in cursos_ok}
@@ -767,7 +802,6 @@ else:
 
         st.markdown("---")
 
-        # Si algún curso quedó sin secciones, no tiene sentido combinar → mostrar error directo
         if cursos_sin_seccion:
             st.error(
                 f"😔 Los siguientes cursos **no tienen ninguna sección compatible** con tus bloqueos: "
@@ -775,7 +809,6 @@ else:
                 "No es posible generar combinaciones. Ajusta tus bloqueos o deselecciona estos cursos."
             )
 
-            # Diagnóstico detallado de los cursos bloqueados
             st.markdown("### 📚 ¿Por qué no hay secciones disponibles?")
             for curso in cursos_sin_seccion:
                 with st.expander(f"❌ {curso} — detalle de conflictos"):
@@ -815,7 +848,7 @@ else:
             )
 
         else:
-            # ── GENERAR COMBINACIONES con las secciones ya filtradas ─────────────
+            # ── GENERAR COMBINACIONES con deduplicación ──────────────────────
             MAX_COMBIS_VALIDAS = 200
             lista_opciones = [opciones_filtradas[c] for c in cursos_ok]
 
@@ -826,14 +859,19 @@ else:
             MAX_ITER = max(5000, total_tras_filtro)
 
             combinaciones_validas = []
+            huellas_vistas = set()   # ← SET para deduplicación
             count = 0
+
             for combo in iterproduct(*lista_opciones):
                 count += 1
-                if count > MAX_ITER: break
+                if count > MAX_ITER:
+                    break
                 filas = list(combo)
-                # combinacion_valida ya es redundante porque filtramos antes,
-                # pero lo dejamos como doble chequeo de seguridad
                 if combinacion_valida(filas) and sin_cruces_internos(filas):
+                    huella = huella_combinacion(filas)
+                    if huella in huellas_vistas:
+                        continue  # ← DESCARTA combinaciones funcionalmente idénticas
+                    huellas_vistas.add(huella)
                     s = score_combinacion(filas)
                     combinaciones_validas.append((s, filas))
                     if len(combinaciones_validas) >= MAX_COMBIS_VALIDAS:
@@ -854,7 +892,6 @@ else:
                     "No hay ninguna combinación sin conflictos internos."
                 )
 
-                # Diagnóstico: mostrar qué secciones quedaron y por qué se cruzan
                 st.markdown("### 📚 Secciones disponibles (pero con cruces entre cursos)")
                 for curso in cursos_ok:
                     filas = opciones_filtradas[curso]
