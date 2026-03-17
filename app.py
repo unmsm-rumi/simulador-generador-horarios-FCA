@@ -285,8 +285,11 @@ def construir_opcion(row):
 def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
     dias     = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"]
     dias_con = ["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"]
-    dia_x    = {d:i for i,d in enumerate(dias_con)}
-    dia_x.update({d:i for i,d in enumerate(dias)})
+
+    # ── CORRECCIÓN: empezar en 1 para evitar que x0 sea negativo en LUNES ──
+    dia_x    = {d:i+1 for i,d in enumerate(dias_con)}
+    dia_x.update({d:i+1 for i,d in enumerate(dias)})
+
     ancho_col = 0.42
 
     fig       = go.Figure()
@@ -404,12 +407,18 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
 
     hora_min,hora_max = 6,23
     n_dias = len(dias_con)
+
     fig.update_layout(
         height=720,
         xaxis=dict(
-            tickvals=list(range(n_dias)), ticktext=dias_con,
-            range=[-0.5,n_dias-0.5], showgrid=True,
-            gridcolor="rgba(128,128,128,0.3)", side="top", fixedrange=True,
+            # ── CORRECCIÓN: tickvals y range ajustados al nuevo offset (+1) ──
+            tickvals=list(range(1, n_dias+1)),
+            ticktext=dias_con,
+            range=[0.5, n_dias+0.5],
+            showgrid=True,
+            gridcolor="rgba(128,128,128,0.3)",
+            side="top",
+            fixedrange=True,
         ),
         yaxis=dict(
             tickvals=list(range(hora_min,hora_max+1)),
@@ -696,13 +705,7 @@ else:
             df_tmp = pd.DataFrame(list(filas))
             return len(detectar_cruces(df_tmp)) == 0
 
-        # ── NUEVA FUNCIÓN: huella única por combinación ──────────────────────
         def huella_combinacion(filas):
-            """
-            Genera una firma única basada en curso + sección + horario exacto de cada sesión.
-            Dos combos con exactamente los mismos cursos, secciones y sesiones producen
-            la misma huella y se tratan como duplicados.
-            """
             partes = []
             for row in filas:
                 curso_n = str(row.get("nombre del curso", ""))
@@ -717,14 +720,7 @@ else:
                 partes.append(f"{curso_n}::{sec_n}::{ses_txt}")
             return "||".join(sorted(partes))
 
-        # ── NUEVA FUNCIÓN: score más discriminante ───────────────────────────
         def score_combinacion(filas):
-            """
-            Score mejorado:
-            - Penaliza horas muy tempranas (antes de 8h) y muy tardías (después de 21h)
-            - Penaliza días con poca carga (visitas poco aprovechadas a la universidad)
-            - Penaliza tener muchos días distintos de clases
-            """
             score = 0
             dias_usados = {}
             for row in filas:
@@ -736,12 +732,10 @@ else:
                     if fin_h > 21: score += (fin_h - 21) * 1.5
                     dur = fin_h - ini_h
                     dias_usados.setdefault(d, []).append(dur)
-            # Penalizar días con muy poca carga horaria
             for dia, durs in dias_usados.items():
                 total_horas_dia = sum(durs)
                 if total_horas_dia < 1.5:
                     score += 2.0
-            # Penalizar tener más días distintos de clases
             score += len(dias_usados) * 0.5
             return score
 
@@ -859,7 +853,7 @@ else:
             MAX_ITER = max(5000, total_tras_filtro)
 
             combinaciones_validas = []
-            huellas_vistas = set()   # ← SET para deduplicación
+            huellas_vistas = set()
             count = 0
 
             for combo in iterproduct(*lista_opciones):
@@ -870,7 +864,7 @@ else:
                 if combinacion_valida(filas) and sin_cruces_internos(filas):
                     huella = huella_combinacion(filas)
                     if huella in huellas_vistas:
-                        continue  # ← DESCARTA combinaciones funcionalmente idénticas
+                        continue
                     huellas_vistas.add(huella)
                     s = score_combinacion(filas)
                     combinaciones_validas.append((s, filas))
