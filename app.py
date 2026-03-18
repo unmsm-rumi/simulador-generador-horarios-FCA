@@ -286,7 +286,6 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
     dias     = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"]
     dias_con = ["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"]
 
-    # ── CORRECCIÓN: empezar en 1 para evitar que x0 sea negativo en LUNES ──
     dia_x    = {d:i+1 for i,d in enumerate(dias_con)}
     dia_x.update({d:i+1 for i,d in enumerate(dias)})
 
@@ -411,7 +410,6 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
     fig.update_layout(
         height=720,
         xaxis=dict(
-            # ── CORRECCIÓN: tickvals y range ajustados al nuevo offset (+1) ──
             tickvals=list(range(1, n_dias+1)),
             ticktext=dias_con,
             range=[0.5, n_dias+0.5],
@@ -501,6 +499,7 @@ if modo_actual == "simulador":
             curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
             curso_df["opcion"]  = curso_df.apply(construir_opcion, axis=1)
             curso_df = curso_df.sort_values("seccion")
+            curso_df = curso_df.drop_duplicates(subset=["opcion"])  # ← FIX: elimina opciones duplicadas
             opciones = curso_df["opcion"].tolist()
             if all("Sin horario asignado" in op for op in opciones):
                 st.warning(f"**{curso}**: ninguna sección tiene horario asignado aún.")
@@ -739,7 +738,7 @@ else:
             score += len(dias_usados) * 0.5
             return score
 
-        # ── FILTRAR SECCIONES POR BLOQUEOS ──────────────────────────────────
+        # ── FILTRAR SECCIONES POR BLOQUEOS (con deduplicación) ──────────────
         opciones_por_curso = {}
         for curso in cursos_ok:
             curso_df = filtrado[filtrado["nombre del curso"]==curso].copy()
@@ -748,6 +747,8 @@ else:
                 .replace({"":"Sin docente","nan":"Sin docente","None":"Sin docente"})
             )
             curso_df["seccion"] = curso_df["seccion"].apply(fmt_seccion)
+            curso_df["opcion"]  = curso_df.apply(construir_opcion, axis=1)
+            curso_df = curso_df.drop_duplicates(subset=["opcion"])  # ← FIX: elimina filas duplicadas
             opciones_por_curso[curso] = [row for _,row in curso_df.iterrows()]
 
         opciones_filtradas = {}
