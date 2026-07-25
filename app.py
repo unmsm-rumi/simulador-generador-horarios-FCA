@@ -439,7 +439,9 @@ def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
 # ================================================
 st.sidebar.header("Filtros")
 
-ORDEN_CICLOS = ["TERCER CICLO","QUINTO CICLO","SEPTIMO CICLO","NOVENO CICLO"]
+# Ciclos vigentes en la carga académica 2026-II (pares: 2°, 4°, 6°, 8°, 10°).
+# El normalizador de texto quita tildes, por eso "DÉCIMO" se busca como "DECIMO".
+ORDEN_CICLOS = ["SEGUNDO CICLO","CUARTO CICLO","SEXTO CICLO","OCTAVO CICLO","DECIMO CICLO"]
 ciclos_disponibles = df["ciclo"].dropna().unique()
 ciclos_ordenados   = [c for c in ORDEN_CICLOS if c in ciclos_disponibles] + \
                      [c for c in sorted(ciclos_disponibles) if c not in ORDEN_CICLOS]
