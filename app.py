@@ -194,6 +194,7 @@ file_mtime = os.path.getmtime(EXCEL_PATH) if EXCEL_PATH.exists() else 0
 df = cargar_data(file_mtime)
 
 COL_DIA2 = "dia 2 (partido)"
+COL_DIA3 = "dia 3"
 for col in ["carrera","ciclo","sede","plan de estudios"]:
     if col in df.columns:
         df[col] = df[col].astype(str)
@@ -203,6 +204,12 @@ if tiene_sesion2_global:
     df[COL_DIA2] = df[COL_DIA2].fillna("").astype(str).str.strip()
     df["hora inicio 2"] = df["hora inicio 2"].astype(str).fillna("")
     df["hora fin 2"]    = df["hora fin 2"].astype(str).fillna("")
+
+tiene_sesion3_global = all(c in df.columns for c in [COL_DIA3,"hora inicio 3","hora fin 3"])
+if tiene_sesion3_global:
+    df[COL_DIA3] = df[COL_DIA3].fillna("").astype(str).str.strip()
+    df["hora inicio 3"] = df["hora inicio 3"].astype(str).fillna("")
+    df["hora fin 3"]    = df["hora fin 3"].astype(str).fillna("")
 
 # ------------------------------------------------
 # FUNCIONES AUXILIARES
@@ -240,6 +247,13 @@ def obtener_sesiones(row):
             fin2 = parsear_hora(row["hora fin 2"])
             if pd.notna(ini2) and pd.notna(fin2):
                 sesiones.append({"curso":row["nombre del curso"],"dia":dia2,"inicio":ini2,"fin":fin2})
+    if tiene_sesion3_global:
+        dia3 = str(row.get(COL_DIA3,"")).strip()
+        if dia3 not in ["","nan","None"]:
+            ini3 = parsear_hora(row["hora inicio 3"])
+            fin3 = parsear_hora(row["hora fin 3"])
+            if pd.notna(ini3) and pd.notna(fin3):
+                sesiones.append({"curso":row["nombre del curso"],"dia":dia3,"inicio":ini3,"fin":fin3})
     return sesiones
 
 def detectar_cruces(df_horario):
@@ -261,25 +275,22 @@ def construir_opcion(row):
     if not docente or docente in ["nan","None",""]: docente = "Sin docente"
     seccion = fmt_seccion(row.get("seccion",""))
     sede    = str(row.get("sede","")).strip()
-    dia1 = str(row.get("dia 1","")).strip()
-    ses1 = None
-    if dia1 not in ["","nan","None"]:
-        ini = parsear_hora(row.get("hora inicio 1",""))
-        fin = parsear_hora(row.get("hora fin 1",""))
+
+    def _txt_sesion(dia_col, ini_col, fin_col):
+        dia = str(row.get(dia_col,"")).strip()
+        if dia in ["","nan","None"]: return None
+        ini = parsear_hora(row.get(ini_col,""))
+        fin = parsear_hora(row.get(fin_col,""))
         if pd.notna(ini) and pd.notna(fin):
-            ses1 = f"{dia1} {ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
-    ses2 = None
-    if tiene_sesion2_global:
-        dia2 = str(row.get(COL_DIA2,"")).strip()
-        if dia2 not in ["","nan","None"]:
-            ini2 = parsear_hora(row.get("hora inicio 2",""))
-            fin2 = parsear_hora(row.get("hora fin 2",""))
-            if pd.notna(ini2) and pd.notna(fin2):
-                ses2 = f"{dia2} {ini2.strftime('%H:%M')}-{fin2.strftime('%H:%M')}"
-    if ses1 and ses2: horario_txt = f"{ses1}  /  {ses2}"
-    elif ses1:        horario_txt = ses1
-    elif ses2:        horario_txt = ses2
-    else:             horario_txt = "Sin horario asignado"
+            return f"{dia} {ini.strftime('%H:%M')}-{fin.strftime('%H:%M')}"
+        return None
+
+    ses1 = _txt_sesion("dia 1", "hora inicio 1", "hora fin 1")
+    ses2 = _txt_sesion(COL_DIA2, "hora inicio 2", "hora fin 2") if tiene_sesion2_global else None
+    ses3 = _txt_sesion(COL_DIA3, "hora inicio 3", "hora fin 3") if tiene_sesion3_global else None
+
+    partes = [s for s in (ses1, ses2, ses3) if s]
+    horario_txt = "  /  ".join(partes) if partes else "Sin horario asignado"
     return f"[{sede}] Sec.{seccion} - {docente} | {horario_txt}"
 
 def dibujar_horario(horario_df, bloqueos=None, titulo="Horario semanal"):
